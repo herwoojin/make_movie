@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { errorToasts } from './helpers';
 
-// 가짜 NEXT_PUBLIC_FIREBASE_* 값으로 빌드했을 때만 실행 (FIREBASE_DUMMY=1).
-// 실제 로그인은 못 하지만, 격리된 페이지에서 SDK가 깨지지 않고 로그인 흐름이 연결되는지 확인한다.
+// NEXT_PUBLIC_FIREBASE_* 값이 들어간 빌드에서만 실행 (FIREBASE_E2E=1).
+// 실제 계정 로그인은 사람이 해야 하므로, 격리된 페이지에서 SDK가 깨지지 않고 로그인 팝업까지 열리는지 확인한다.
 test.describe('Firebase 설정이 있을 때', () => {
-  test.skip(!process.env.FIREBASE_DUMMY, '가짜 Firebase 설정으로 빌드했을 때만 실행');
+  test.skip(!process.env.FIREBASE_E2E, 'Firebase 설정이 들어간 빌드에서만 실행 (FIREBASE_E2E=1)');
 
   test('격리된 페이지에서 SDK가 초기화되고 로그아웃 상태로 판별된다', async ({ page }) => {
     const errors: string[] = [];
