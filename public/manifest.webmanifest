@@ -1,0 +1,15 @@
+{
+  "name": "편집ON — 무료 브라우저 영상 편집기",
+  "short_name": "편집ON",
+  "description": "무음 자동 컷, 자막 자동 생성, 얼굴 자동 모자이크. 영상은 브라우저 안에서만 처리됩니다.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0e1016",
+  "theme_color": "#0e1016",
+  "lang": "ko",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

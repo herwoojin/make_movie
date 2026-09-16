@@ -1,0 +1,73 @@
+# 편집ON — Netlify 배포 설정
+# GitHub 저장소를 Netlify에 연결하면 main 브랜치 push마다 자동 배포된다.
+# Next.js는 Netlify가 자동 감지해 Next.js 런타임(서버리스 함수 + CDN)으로 올린다.
+
+[build]
+  # postinstall이 캐시 때문에 건너뛰어져도 wasm·모델·폰트가 빠지지 않도록 빌드 전에 한 번 더 복사한다
+  command = "npm run assets && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# ── cross-origin isolation 헤더 ───────────────────────────────────────────────
+# 페이지(서버리스 응답)는 next.config.js의 headers()가 붙인다 (/login 제외).
+# 아래는 CDN이 직접 내주는 정적 파일용. 워커 스크립트·wasm에도 붙어 있어야 워커 안에서 SharedArrayBuffer가 동작한다.
+
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "/ffmpeg/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "/ffmpeg-st/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "/mediapipe/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "/sample/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+    Cache-Control = "no-cache"

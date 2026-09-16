@@ -1,0 +1,10 @@
+rules_version = '2';
+
+// 편집ON은 Firebase Storage를 쓰지 않는다. 영상을 서버에 올리는 순간 "무료·프라이버시" 전제가 깨지므로 전부 거부한다.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

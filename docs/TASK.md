@@ -1,0 +1,230 @@
+# TASK — 편집ON (EditON)
+
+> 실행 태스크 목록 / v1.0 / 2026-09-13 (체크 갱신 2026-09-15)
+> 규칙: **한 번에 하나씩.** 완료 조건을 눈으로 확인한 뒤 체크한다. 체크 안 된 태스크가 있으면 다음 마일스톤으로 넘어가지 않는다.
+> 체크 기준(이번 갱신): 구현 + 자동 검증(Vitest 또는 Playwright E2E) 또는 스크린샷으로 확인한 것만 `[x]`. 구현했지만 사람이 직접 확인해야 하는 항목은 `[ ]`로 두고 괄호에 이유를 적었다.
+
+범례: `S` 반나절 이하 · `M` 1일 · `L` 2일 이상 · ⚠️ 막히기 쉬운 곳
+
+---
+
+## M0. 기술 검증 (1주차)
+
+- [x] **T-000** `S` 저장소 생성, docs/ 에 문서 7종 배치, AGENTS.md에 PROMPT.md 0장 붙여넣기 (git 저장소는 아직 만들지 않음)
+- [x] **T-001** `S` ⚠️ next.config.js에 COOP/COEP 헤더 → 로컬에서 `crossOriginIsolated === true` 확인 (E2E)
+- [ ] **T-002** `M` ⚠️ **스파이크 1**: Netlify 배포 후에도 `crossOriginIsolated === true` 확인 (배포 설정·점검 스크립트 준비 완료, 배포 미실시)
+- [x] **T-003** `L` ⚠️ **스파이크 2**: 5초 mp4 → WebCodecs 디코드 → Canvas에 사각형 → 재인코딩 → 재생 확인 (자막·모자이크 합성 포함, ffprobe 검증)
+- [x] **T-004** `L` ⚠️ **스파이크 3**: transformers.js Whisper로 한국어 오디오 → **단어 단위** 타임스탬프 확인 (macOS 음성 합성 11.5초 픽스처, RUN_NETWORK E2E)
+
+> **판정**: 스파이크 2·3 성공, 스파이크 1은 로컬만 성공(배포 후 재확인 필요). 범위 조정 없음.
+
+---
+
+## M1. 편집기 뼈대 (2주차)
+
+### 환경
+- [x] **T-005** `S` Tailwind + shadcn/ui 초기화, Pretendard self-host, 다크 테마 토큰
+- [x] **T-006** `S` `lib/env/capabilities.ts` — 5개 기능 감지 + 한국어 안내 문구
+- [x] **T-007** `S` 랜딩 페이지에 지원 진단 표시 + 미지원 브라우저 안내
+
+### 저장 계층
+- [x] **T-008** `M` `lib/storage/db.ts` — ERD 3장 Dexie 스키마 + 전체 타입
+- [x] **T-009** `M` `lib/storage/opfs.ts` — ensureDir / writeFile(스트리밍) / readFile / deleteDir
+- [x] **T-010** `S` `workers/storage.worker.ts` — SyncAccessHandle 대용량 쓰기
+- [x] **T-011** `S` `lib/storage/quota.ts` — 여유 공간 확인, QUOTA_EXCEEDED 에러
+- [x] **T-012** `S` Vitest: DB CRUD + OPFS 왕복 테스트 (OPFS 왕복은 happy-dom에 없어 E2E "새로고침 후 유지"로 검증. 500MB 파일 수동 확인은 미실시)
+
+### 임포트
+- [x] **T-013** `S` 드래그앤드롭 + 파일 선택 UI, 지원 포맷 검증
+- [x] **T-014** `M` `lib/media/probe.ts` — 해상도/fps/코덱/길이 추출
+- [x] **T-015** `M` `lib/audio/decode.ts` — 모노 16kHz PCM 디코드 (OfflineAudioContext)
+- [x] **T-016** `S` `lib/audio/peaks.ts` — 초당 100포인트 min/max 피크 + 테스트
+- [x] **T-017** `M` `workers/audio.worker.ts` — 디코드+피크, 진행률 보고, 취소
+- [x] **T-018** `M` 썸네일 스트립 생성 (1초 이상 간격·최대 120장 WebP → OPFS)
+
+### 타임라인
+- [x] **T-019** `M` `store/timelineStore.ts` — 현재시간·줌·선택·재생상태
+- [x] **T-020** `L` ⚠️ `WaveformTrack.tsx` — Canvas 파형, 줌 레벨별 다운샘플, rAF 갱신 (60fps 계측은 T-084에서)
+- [x] **T-021** `M` `TimelineRoot.tsx` — 눈금자, 재생헤드 드래그, Ctrl+휠 줌
+- [x] **T-022** `M` `PreviewCanvas.tsx` — video 요소 + 오버레이 캔버스 합성
+- [x] **T-023** `S` `TransportBar.tsx` — 재생/정지/±1프레임/±5초, 스페이스바
+
+### 편집 핵심
+- [x] **T-024** `M` ⚠️ `lib/core/edl.ts` — splitAt / toggleSegment / sourceToOutput / outputToSource
+- [x] **T-025** `M` ⚠️ Vitest: edl.ts 커버리지 90% 이상 (라인 100%, 분기 97.8%)
+- [x] **T-026** `M` `lib/core/undo.ts` + 명령 스택, Ctrl+Z / Ctrl+Shift+Z, 20단계
+- [x] **T-027** `S` 타임라인에서 분할/삭제/복원 UI 연결 (E2E: S → Delete → Ctrl+Z)
+
+### 내보내기 (최소)
+- [x] **T-028** `L` ⚠️ `lib/encode/webcodecs/` — demux → decode → encode → mux, EDL 적용
+- [x] **T-029** `M` ⚠️ 오디오 구간 이어붙이기 + 컷 경계 5ms 크로스페이드 (영상·소리 길이 차이 0.1초 이내 검증)
+- [x] **T-030** `M` `ExportPanel.tsx` — 프리셋, 진행률, 남은 시간, 취소
+- [x] **T-031** `S` 결과 Blob → OPFS 저장 → 다운로드 링크
+
+> **M1 완료 조건**: ✅ 5초 테스트 영상의 무음 2구간을 잘라 내보낸 mp4가 h264+aac로 정상, 결과 길이 3.83초(기대 3.8초), 영상·소리 싱크 0.1초 이내.
+
+---
+
+## M2. 자동 컷 편집 (3주차)
+
+- [x] **T-032** `M` ⚠️ `lib/audio/silence.ts` — TRD 4.2장 알고리즘 7단계 + 히스테리시스
+- [x] **T-033** `M` ⚠️ Vitest: 완전무음 / 무음없음 / 짧은무음 무시 / padding 음수길이 / minKeep 병합 (+ 히스테리시스 3종)
+- [x] **T-034** `S` `lib/core/edl.ts`에 `applySuggestions` 추가 + 테스트
+- [x] **T-035** `M` `AutoCutPanel.tsx` — 슬라이더 4종 + 300ms 디바운스 재계산
+- [x] **T-036** `M` 제안 목록 UI — 시작·끝·길이·미리듣기·개별 토글·일괄 선택
+- [x] **T-037** `S` 파형 위 제안 구간 오버레이 (반투명 빨강)
+- [x] **T-038** `S` "적용" → EDL 반영, "전체 되돌리기"
+- [x] **T-039** `M` 컷 경계 1프레임 단위 미세 조정 UI (E2E: 3프레임 이동 → 결과 2.0초 → 2.1초)
+- [ ] **T-040** `M` ⚠️ **실사용 검증**: 본인 영상 3개로 테스트, 수동 보정 필요 컷 비율 기록 (사용자 직접 확인 필요)
+
+> **M2 완료 조건**: 무음 감지는 워커에서 12초 영상 기준 수 ms. 20분 영상 3초 이내 여부와 "눈으로 봐도 맞다"는 실제 영상으로 확인 필요.
+
+---
+
+## M3. 자막 (4~5주차)
+
+### 3-1. STT
+- [x] **T-041** `S` `lib/stt/types.ts` — SttAdapter 인터페이스
+- [x] **T-042** `L` ⚠️ `lib/stt/localWhisper.ts` — WebGPU, 단어 타임스탬프, 30초 청크, 다운로드 진행률
+- [ ] **T-043** `M` `lib/stt/groq.ts` — BYOK, 25MB 분할, 전송 고지 플래그 (구현 완료, Groq 키가 없어 실호출 미검증)
+- [x] **T-044** `M` `workers/stt.worker.ts`
+- [x] **T-045** `M` `lib/stt/fillers.ts` — 사전 + 매칭 + 테스트 ('음' O, '음악' X)
+- [x] **T-046** `S` 필러 사전 편집 UI, `그/저/뭐` 기본 비활성
+- [x] **T-047** `S` 설정 화면 BYOK 키 입력 + "이 브라우저에만 저장" 고지
+- [x] **T-048** `M` 추임새 제거 → CutSuggestion 생성 → AutoCutPanel에 통합
+
+### 3-2. 편집 UI
+- [x] **T-049** `M` `lib/subtitle/model.ts` — 단어 → 문장 큐 묶기 (문장부호·0.7초 간격·글자수)
+- [x] **T-050** `L` `SubtitlePanel.tsx` 1단계 — 인라인 편집, 합치기/나누기, 찾아바꾸기 (로직 단위 테스트 + 인라인 편집 E2E, 합치기·나누기 버튼 E2E는 없음)
+- [x] **T-051** `L` `SubtitlePanel.tsx` 2단계 — 시간 조정, ±0.1초, "현재 위치로 맞추기" (로직 단위 테스트, 버튼 E2E 없음)
+- [x] **T-052** `M` `SubtitleTrack.tsx` — 큐 블록 드래그/리사이즈, 겹침 경고 (드래그 E2E 없음)
+- [x] **T-053** `M` ⚠️ EDL 변경 시 자막 재매핑 + 고아 큐 처리 UI (원본 앵커 방식, 반복 컷 누적오차 0 테스트)
+
+### 3-3. 스타일·출력
+- [x] **T-054** `M` ⚠️ `renderSubtitleToCanvas()` — 미리보기·내보내기 공용 렌더 함수
+- [x] **T-055** `L` `StylePanel.tsx` — SubtitleStyle 전 필드 UI + 실시간 미리보기
+- [x] **T-056** `S` 기본 프리셋 4종 + 저장/불러오기 (로컬)
+- [x] **T-057** `M` `lib/subtitle/ass.ts` — ASS 생성 (ffmpeg 번인용) (ffmpeg 경로 번인 결과는 미검증)
+- [x] **T-058** `S` `lib/subtitle/srt.ts` — SRT/VTT 내보내기·불러오기 + 테스트
+- [x] **T-059** `M` WebCodecs 렌더 파이프라인에 자막 오버레이 합성 연결
+
+> **M3 완료 조건**: 자막 번인 mp4 생성 ✅. "미리보기와 결과가 픽셀 단위로 같다"는 같은 함수를 쓰는 구조로 보장했으나 프레임 비교는 미실시.
+
+---
+
+## M4. 얼굴 모자이크 (6주차)
+
+- [x] **T-060** `M` `lib/vision/faceDetect.ts` — MediaPipe 래퍼, self-host wasm/tflite (워커 로드·스캔 완료 E2E)
+- [x] **T-061** `M` ⚠️ `lib/vision/tracker.ts` — IoU 그리디 트래킹 + 테스트
+- [x] **T-062** `S` 5프레임 샘플링 + 선형 보간
+- [x] **T-063** `M` `workers/vision.worker.ts` — 전체 스캔, 진행률, 취소
+- [x] **T-064** `M` `lib/vision/mosaicRender.ts` — pixelate / blur / box / emoji
+- [x] **T-065** `M` `MosaicPanel.tsx` — 인물 목록 + 대표 썸네일 + on/off
+- [x] **T-066** `S` 모드·강도·배율·모양 조절 UI
+- [x] **T-067** `M` 수동 사각형 추가·이동·삭제 (미리보기 위 드래그)
+- [x] **T-068** `M` WebCodecs 렌더에 모자이크 합성 연결 (자막보다 먼저 그림)
+- [ ] **T-069** `M` `/tools` 사진 일괄 모자이크 + ZIP 다운로드 (구현 완료, 얼굴 사진 픽스처가 없어 미검증)
+
+> **M4 완료 조건**: 사람 2명이 나오는 실제 영상으로 추적·인물별 제외 확인 필요(테스트 영상에는 얼굴이 없음).
+
+---
+
+## M5. 도구함 (7주차)
+
+- [x] **T-070** `M` `/tools` 레이아웃 + 도구 카드 목록
+- [x] **T-071** `M` 일괄 GIF 변환 — 여러 파일 큐, 해상도·fps·길이·용량 상한
+- [ ] **T-072** `M` 화면 녹화 (getDisplayMedia) → GIF/MP4 (구현 완료, 화면 공유 권한 창 때문에 자동 검증 불가)
+- [x] **T-073** `S` 오디오 추출 (MP3/WAV, 구간 지정)
+- [x] **T-074** `M` 이미지 편집 — 리사이즈·자르기·회전·포맷변환·용량압축 (회전·JPG 저장 E2E, 나머지는 계산 단위 테스트)
+- [x] **T-075** `S` 도구함 → 편집기 유입 동선 (결과물을 "편집기로 보내기")
+
+---
+
+## M6. 다듬기·배포 (8주차)
+
+- [x] **T-076** `L` ⚠️ `lib/encode/ffmpeg/` 폴백 경로 완성 (select 필터 컷·MP3 검증. ASS 번인·구운 프레임 경로는 미검증)
+- [x] **T-077** `M` 인코더 자동 선택 + 사용자 강제 선택 옵션
+- [x] **T-078** `M` 온보딩 — 랜딩 샘플 영상으로 30초 체험
+- [x] **T-079** `S` 도움말 화면 (GUIDE.md 8장 내용)
+- [x] **T-080** `M` `/projects` 목록 + 삭제 + 저장공간 정리 + orphan 스캔 (orphan 정리 버튼은 미검증)
+- [x] **T-081** `M` 프로젝트 파일(.editon.json) 내보내기·불러오기 + 원본 재연결
+- [ ] **T-082** `M` Firebase 로그인 (Google) + 프리셋·추임새 사전·프로젝트 기록 동기화 (구현 완료, Firebase 프로젝트 미연결로 실제 로그인·규칙 미검증)
+- [ ] **T-083** `S` PWA (manifest, 아이콘, 오프라인 셸) (구현 완료, 오프라인 동작 미검증)
+- [ ] **T-084** `M` ⚠️ 성능 측정 — TRD 6장 예산 대비 실측, 초과 항목 개선 (미실시)
+- [ ] **T-085** `M` 접근성 — 키보드 단축키 전체, 포커스 순서, 대비, 스크린리더 라벨 (단축키·라벨 구현, Lighthouse·대비 점검 미실시)
+- [x] **T-086** `S` 에러 메시지 전수 점검 (모든 에러에 hint 있는지) — `AppError`가 코드별 기본 hint를 강제
+- [x] **T-087** `M` Playwright E2E 시나리오 (16종 + 네트워크 1종 + 스크린샷 1종)
+- [ ] **T-088** `M` ⚠️ 실사용자 3명 테스트 → 막힌 지점 목록화 → 상위 5개 수정
+- [ ] **T-089** `S` 배포 체크리스트 (GUIDE.md 6.4장) 전항목 통과
+
+---
+
+## 진행 현황
+
+```
+M0 기술검증   [████████  ]  4/5
+M1 뼈대       [██████████] 27/27
+M2 자동컷     [█████████ ]  8/9
+M3 자막       [█████████ ] 18/19
+M4 모자이크   [█████████ ]  9/10
+M5 도구함     [████████  ]  5/6
+M6 배포       [██████    ]  8/14
+─────────────────────────────
+합계                        79/90
+```
+
+### 검증 기록 (2026-09-15)
+- `npm run typecheck` 오류 0, `npm run lint` 경고 0
+- `npm run test:cov` 단위 테스트 203개 통과, 대상 모듈 라인 커버리지 99.6%
+- `npm run build` 성공 (경고: MediaPipe 번들 내부 동적 import 1건 — 의도된 우회)
+- `npm run e2e` (Google Chrome) 16종 통과, `RUN_NETWORK=1` 로컬 Whisper 1종 통과, `SHOTS=1` 스크린샷 9장 육안 확인
+- 남은 수동 확인: 배포(T-002·T-089), 실제 영상 품질(T-040·M4 완료 조건), Groq·Supabase 실계정(T-043·T-082), 화면 녹화(T-072), 사진 얼굴(T-069), 오프라인(T-083), 성능·접근성(T-084·T-085), 사용자 테스트(T-088)
+
+---
+
+## 결정 기록
+
+> 설계와 다르게 간 것, 막혀서 우회한 것, 나중의 내가 알아야 할 것을 한 줄씩 적는다.
+
+| 날짜 | 태스크 | 내용 |
+|---|---|---|
+| 2026-09-14 | T-000 | 사용자 요청으로 90개 태스크를 한 번에 구현. 문서 7종은 docs/로 이동, 새 npm 패키지는 GUIDE 2.4장 목록 + 아래 기록한 것만 추가 |
+| 2026-09-14 | T-004 | 단어 타임스탬프에는 정렬 헤드가 든 `onnx-community/whisper-base_timestamped` 필요 (PROMPT의 whisper-base 대신) |
+| 2026-09-14 | T-004 | transformers.js를 webpack으로 묶으면 ORT 번들의 `import.meta` 때문에 Next 워커 청크 압축이 실패 → `public/vendor/transformers`에 self-host하고 `webpackIgnore` 동적 import |
+| 2026-09-14 | T-005 | shadcn CLI 대신 동일 구조의 컴포넌트를 직접 작성(Radix slot/slider/tabs/dialog/switch/progress, cva, clsx, tailwind-merge, lucide-react 추가) |
+| 2026-09-14 | T-007 | COEP는 HuggingFace 모델 CDN 때문에 `credentialless` 유지. CSP 헤더는 개발 모드(eval/inline) 충돌로 아직 미적용 — 배포 전 결정 필요 |
+| 2026-09-14 | T-008 | ERD 외 추가: `stylePresets` 테이블(로컬 프리셋), SubtitleCue에 `sourceStartMs/sourceEndMs/orphan`(원본 앵커로 컷 재매핑 누적오차 제거) |
+| 2026-09-14 | T-012 | happy-dom에 IndexedDB가 없어 dev 의존성 `fake-indexeddb` 추가 |
+| 2026-09-14 | T-017 | OfflineAudioContext는 워커에서 쓸 수 없음 → 디코드는 메인(비동기·오디오 스레드), 피크·무음·PCM 저장은 audio.worker |
+| 2026-09-14 | T-026 | 되돌리기는 immer 패치 기반, history 테이블에 패치를 저장해 새로고침 후에도 유지. 스타일 슬라이더·모자이크 강도는 기록 없이 반영(드래그마다 단계가 쌓이지 않게) |
+| 2026-09-14 | T-028 | WebCodecs 출력은 mp4-muxer StreamTarget → OPFS SyncAccessHandle 스트리밍. MP4(H.264 + AAC, AAC 없으면 Opus)만, WebM 출력은 미제공(webm-muxer 미도입) |
+| 2026-09-15 | T-028 | mp4-muxer `frameRate`는 정수만 받음 → 29.92fps 원본에서 실패. 디먹서 fps 정규화 + 먹서엔 반올림 값 전달 |
+| 2026-09-14 | T-029 | 크로스페이드는 길이 보존형(A 꼬리 + B 직전 N샘플 겹침) — 컷이 수백 개여도 싱크가 밀리지 않음. AAC 프라이밍으로 오디오 길이가 수십 ms 길게 표시됨 |
+| 2026-09-14 | T-042 | Groq 외 gemini·openai STT 어댑터는 미구현(P3, 번역 자막과 함께 v2로) |
+| 2026-09-14 | T-060 | MediaPipe 1.0은 모듈 워커에서 `self.import`가 있으면 그것으로 로더를 불러옴 → 번들 밖 import 제공. 모델은 postinstall에서 1회 다운로드 |
+| 2026-09-14 | T-071 | GIF 인코더·ZIP 작성기를 의존성 없이 직접 구현(GIF 때문에 ffmpeg 30MB를 받지 않게) |
+| 2026-09-14 | T-076 | @ffmpeg/ffmpeg 워커의 `import(coreURL)`을 webpack이 깨뜨림 → `dist/esm`을 `public/ffmpeg/lib`에 self-host하고 `classWorkerURL` 지정 |
+| 2026-09-15 | T-076 | core-mt가 x264 `threads=6`에서 첫 프레임 후 교착 → 디코드 2·인코드 4 스레드 상한 + 25초 무응답 시 단일 스레드 코어로 자동 재시도 |
+| 2026-09-14 | T-076 | ffmpeg 경로의 모자이크는 캔버스로 구운 JPEG 시퀀스 방식이라 결과물 3분 이하로 제한 |
+| 2026-09-15 | 운영 | 서버 헬스 메모리를 `os.freemem` 대신 프로세스 RSS/메모리 한도로 변경(macOS·리눅스 파일 캐시로 인한 거짓 경보). 개발 Mac은 디스크 여유가 적어(93.5% 사용) 배터리가 주황색으로 보이는 것이 정상 |
+| 2026-09-15 | T-087 | Playwright는 설치된 Google Chrome 채널 사용(번들 Chromium엔 H.264/AAC 없음). 결과물은 로컬 ffprobe로 코덱·길이·싱크 검증 |
+| 2026-09-15 | T-082 | 사용자 결정으로 Supabase → Firebase(Auth Google 로그인 + Firestore) 전환, @supabase/supabase-js 제거·firebase 12 추가. 구조·규칙은 ERD 5장·firestore.rules |
+| 2026-09-15 | T-082 | COOP same-origin 문서에선 Firebase 팝업 로그인이 불가 → `/login`만 격리 헤더 제외, 앱↔로그인 이동은 전체 새로고침. Auth는 팝업 처리기 없이 초기화(격리 페이지에서 authDomain iframe 차단 회피) |
+| 2026-09-15 | T-082 | 동기화는 버튼을 누를 때만(자동 업로드 없음). updatedAtMs 최신 우선, 서버에서 사라진 프리셋은 다시 올리고 로컬 삭제 시 서버도 삭제. Java가 없어 에뮬레이터 규칙 테스트는 미실시 |
+| 2026-09-15 | T-002 | 사용자 결정으로 배포를 Vercel → GitHub + Netlify로 변경. 페이지 헤더는 next.config.js, CDN 정적 파일 헤더는 netlify.toml(중복 방지를 위해 Netlify 빌드에선 next.config가 정적 경로 제외). 배포 후 scripts/check-deploy.mjs로 점검 |
+| 2026-09-15 | T-089 | GitHub Actions CI(타입·린트·단위 테스트·빌드) 추가, E2E는 수동 실행(리눅스 Chrome은 AAC 인코더가 없어 결과가 다름). 저장소는 git init만 하고 커밋·원격 생성은 사용자 확인 후 |
+
+**기록 예시**
+```
+2026-09-20 | T-004 | Whisper base 모델 단어 타임스탬프 확인. small은 WebGPU에서 너무 느려 base로 확정.
+2026-09-25 | T-020 | 파형을 React로 그렸더니 20분 영상에서 5fps. Canvas 직접 렌더 + rAF로 변경.
+2026-10-02 | T-028 | Safari에서 avc1 인코딩 실패. 기본 출력을 WebM으로 두고 MP4는 지원 시에만 노출.
+```
+
+---
+
+## 막혔을 때
+
+1. **30분 룰**: 같은 문제로 30분 넘게 헤매면 GUIDE.md 7장 문제 해결부터 확인한다.
+2. **범위 축소**: 해결이 안 되면 그 기능을 뒤로 미루고 다음 태스크로 간다. PLAN.md 6장의 "잘라낼 순서"를 따른다.
+3. **결정 기록에 남긴다**: 미룬 것도 기록한다. 안 그러면 왜 안 만들었는지 잊는다.

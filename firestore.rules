@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// 편집ON Firestore 보안 규칙
+// 원칙: 로그인한 사용자는 자기 users/{uid} 아래만 읽고 쓴다. 영상·오디오·자막 내용은 어떤 문서에도 없다.
+// 배포: firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function stringMax(value, max) {
+      return value is string && value.size() <= max;
+    }
+
+    match /users/{uid} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['displayName', 'email', 'photoURL', 'createdAt', 'lastLoginAt']);
+
+      // 자막 스타일 프리셋
+      match /stylePresets/{presetId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['name', 'style', 'isPublic', 'updatedAtMs', 'schemaVersion'])
+          && stringMax(request.resource.data.name, 60) && request.resource.data.name.size() > 0
+          && request.resource.data.style is map && request.resource.data.style.size() <= 40
+          && request.resource.data.isPublic is bool
+          && request.resource.data.updatedAtMs is number
+          && request.resource.data.schemaVersion is int;
+      }
+
+      // 추임새 사전 (문서 id = 언어 코드)
+      match /fillerDictionaries/{language} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['language', 'words', 'updatedAtMs'])
+          && stringMax(request.resource.data.language, 10)
+          && request.resource.data.words is list && request.resource.data.words.size() <= 500
+          && request.resource.data.updatedAtMs is number;
+      }
+
+      // "이 기기에 이런 프로젝트가 있었다" 기록 — 영상은 없음
+      match /projectMeta/{localId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['localId', 'name', 'durationMs', 'sourceDurationMs', 'deviceLabel', 'updatedAtMs'])
+          && request.resource.data.localId == localId
+          && stringMax(request.resource.data.name, 200)
+          && request.resource.data.durationMs is number
+          && request.resource.data.sourceDurationMs is number
+          && stringMax(request.resource.data.deviceLabel, 60)
+          && request.resource.data.updatedAtMs is number;
+      }
+    }
+
+    // 공개 프리셋 둘러보기(향후 기능): 로그인한 사용자는 isPublic == true 인 프리셋만 읽을 수 있다
+    match /{path=**}/stylePresets/{presetId} {
+      allow read: if signedIn() && resource.data.isPublic == true;
+    }
+
+    // 그 외 경로는 모두 거부 (규칙에 없는 경로는 기본 거부)
+  }
+}

@@ -1,0 +1,25 @@
+node_modules/
+.next/
+out/
+coverage/
+test-results/
+test-results-network/
+playwright-report/
+.netlify/
+.firebase/
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.tsbuildinfo
+next-env.d.ts
+.env*.local
+.DS_Store
+
+# postinstall이 node_modules에서 복사해 오는 자산 (self-host)
+public/ffmpeg/
+public/ffmpeg-st/
+public/mediapipe/*.js
+public/mediapipe/*.wasm
+public/fonts/
+public/vendor/
