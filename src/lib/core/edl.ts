@@ -1,5 +1,8 @@
 // EDL(Edit Decision List) 순수 함수 모음. 원본은 절대 건드리지 않고, "어느 원본 구간을 남길지"만 표현한다.
 // 모든 함수는 입력 배열을 변경하지 않고 새 배열을 돌려준다(undo 패치·React 비교가 참조 동등성에 의존하기 때문).
+//
+// ⚠️ v2 시간 계산 순서: 원본시간 → [EDL 적용] → [배속 적용] → 출력시간.
+// 이 파일의 createTimeMap이 유일한 진실이고, sourceToOutput/outputToSource는 그 위에 있는 얇은 껍데기다.
 import { nanoid } from 'nanoid';
 import type { CutSuggestion, EdlOrigin, EdlSegment, TimeRange } from '@/types/models';
 
@@ -34,19 +37,138 @@ export function sourceDurationMs(edl: readonly EdlSegment[]): number {
   return edl.reduce((max, s) => Math.max(max, s.sourceEndMs), 0);
 }
 
-export function outputDurationMs(edl: readonly EdlSegment[]): number {
-  return enabledSorted(edl).reduce((acc, s) => acc + (s.sourceEndMs - s.sourceStartMs), 0);
+export function mergeRanges(ranges: readonly TimeRange[]): TimeRange[] {
+  const sorted = ranges.filter((r) => r.endMs > r.startMs).sort((a, b) => a.startMs - b.startMs);
+  const out: TimeRange[] = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && r.startMs <= last.endMs) last.endMs = Math.max(last.endMs, r.endMs);
+    else out.push({ startMs: r.startMs, endMs: r.endMs });
+  }
+  return out;
 }
 
-/** 원본 시간 → 결과물 시간. 잘려나간 구간이면 null. (ERD 6.3) */
-export function sourceToOutput(sourceMs: number, edl: readonly EdlSegment[]): number | null {
-  let acc = 0;
-  for (const seg of enabledSorted(edl)) {
-    if (sourceMs < seg.sourceStartMs) return null;
-    if (sourceMs <= seg.sourceEndMs) return acc + (sourceMs - seg.sourceStartMs);
-    acc += seg.sourceEndMs - seg.sourceStartMs;
+/** 내보내기에 들어갈 원본 구간(맞닿은 구간은 하나로 합침). */
+export function keptRanges(edl: readonly EdlSegment[]): TimeRange[] {
+  return mergeRanges(enabledSorted(edl).map((s) => ({ startMs: s.sourceStartMs, endMs: s.sourceEndMs })));
+}
+
+export function removedRanges(edl: readonly EdlSegment[]): TimeRange[] {
+  return mergeRanges(sortSegments(edl).filter((s) => !s.enabled).map((s) => ({ startMs: s.sourceStartMs, endMs: s.sourceEndMs })));
+}
+
+// ── 시간 매핑 (EDL → 배속) ──────────────────────────────────────────────────
+
+/** 구간별 재생 속도. 겹치지 않는 원본 구간이어야 한다 */
+export interface SpeedRange extends TimeRange {
+  speed: number;
+}
+
+export interface TimeSpan {
+  sourceStartMs: number;
+  sourceEndMs: number;
+  speed: number;
+  outStartMs: number;
+  outEndMs: number;
+}
+
+export interface TimeMap {
+  spans: TimeSpan[];
+  totalOutMs: number;
+  /** 원본 시간 → 결과물 시간. 잘려나간 구간이면 null */
+  toOutput(sourceMs: number): number | null;
+  /** 결과물 시간 → 원본 시간. 경계는 bias로 어느 쪽을 택할지 정한다 */
+  toSource(outputMs: number, bias?: 'start' | 'end'): number | null;
+  speedAt(sourceMs: number): number;
+}
+
+export const MIN_SPEED = 0.25;
+export const MAX_SPEED = 4;
+
+export function normalizeSpeed(speed: number): number {
+  if (!Number.isFinite(speed) || speed <= 0) return 1;
+  return Math.round(Math.min(MAX_SPEED, Math.max(MIN_SPEED, speed)) * 100) / 100;
+}
+
+function speedLookup(speeds: readonly SpeedRange[], ms: number, fallback: number): number {
+  for (const s of speeds) {
+    if (ms >= s.startMs && ms < s.endMs) return normalizeSpeed(s.speed);
   }
-  return null;
+  return normalizeSpeed(fallback);
+}
+
+/** ms 이후 처음 만나는 배속 경계 (없으면 Infinity) */
+function nextSpeedBoundary(speeds: readonly SpeedRange[], ms: number): number {
+  let next = Infinity;
+  for (const s of speeds) {
+    if (s.startMs > ms && s.startMs < next) next = s.startMs;
+    if (s.endMs > ms && s.endMs < next) next = s.endMs;
+  }
+  return next;
+}
+
+/**
+ * EDL(남길 구간)과 배속을 합쳐 "원본 ↔ 결과물" 변환표를 만든다.
+ * 프레임마다 호출되는 렌더 루프에서는 이 표를 한 번 만들어 재사용한다.
+ */
+export function createTimeMap(edl: readonly EdlSegment[], speeds: readonly SpeedRange[] = [], defaultSpeed = 1): TimeMap {
+  const base = normalizeSpeed(defaultSpeed);
+  const active = speeds.filter((s) => s.endMs > s.startMs);
+  const spans: TimeSpan[] = [];
+  let out = 0;
+  for (const range of keptRanges(edl)) {
+    let pos = range.startMs;
+    while (pos < range.endMs) {
+      const speed = speedLookup(active, pos, base);
+      const end = Math.min(range.endMs, nextSpeedBoundary(active, pos));
+      const len = end - pos;
+      spans.push({ sourceStartMs: pos, sourceEndMs: end, speed, outStartMs: out, outEndMs: out + len / speed });
+      out += len / speed;
+      pos = end;
+    }
+  }
+
+  const findBySource = (ms: number): TimeSpan | undefined => {
+    let lo = 0;
+    let hi = spans.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const s = spans[mid];
+      if (ms < s.sourceStartMs) hi = mid - 1;
+      else if (ms > s.sourceEndMs) lo = mid + 1;
+      else return s;
+    }
+    return undefined;
+  };
+
+  return {
+    spans,
+    totalOutMs: Math.round(out),
+    speedAt: (ms) => findBySource(ms)?.speed ?? speedLookup(active, ms, base),
+    toOutput(sourceMs) {
+      const span = findBySource(sourceMs);
+      if (!span) return null;
+      return Math.round(span.outStartMs + (sourceMs - span.sourceStartMs) / span.speed);
+    },
+    toSource(outputMs, bias = 'start') {
+      if (outputMs < 0 || spans.length === 0) return null;
+      if (outputMs > out + 0.5) return null;
+      for (let i = 0; i < spans.length; i++) {
+        const s = spans[i];
+        const inside = bias === 'start' ? outputMs < s.outEndMs : outputMs <= s.outEndMs && outputMs > s.outStartMs;
+        if (inside || (i === spans.length - 1 && outputMs >= s.outEndMs)) {
+          const clamped = Math.min(Math.max(outputMs, s.outStartMs), s.outEndMs);
+          return Math.round(s.sourceStartMs + (clamped - s.outStartMs) * s.speed);
+        }
+      }
+      return null;
+    },
+  };
+}
+
+/** 원본 시간 → 결과물 시간. 잘려나간 구간이면 null. (ERD 6.3 + v2 배속) */
+export function sourceToOutput(sourceMs: number, edl: readonly EdlSegment[], speeds: readonly SpeedRange[] = [], defaultSpeed = 1): number | null {
+  return createTimeMap(edl, speeds, defaultSpeed).toOutput(sourceMs);
 }
 
 /**
@@ -55,23 +177,19 @@ export function sourceToOutput(sourceMs: number, edl: readonly EdlSegment[]): nu
  * (자막 시작은 다음 구간의 시작, 자막 끝은 이전 구간의 끝이 자연스럽다).
  */
 export function outputToSource(
-  outputMs: number, edl: readonly EdlSegment[], bias: 'start' | 'end' = 'start',
+  outputMs: number, edl: readonly EdlSegment[], bias: 'start' | 'end' = 'start', speeds: readonly SpeedRange[] = [], defaultSpeed = 1,
 ): number | null {
-  if (outputMs < 0) return null;
-  const segs = enabledSorted(edl);
-  let acc = 0;
-  for (let i = 0; i < segs.length; i++) {
-    const seg = segs[i];
-    const len = seg.sourceEndMs - seg.sourceStartMs;
-    const isLast = i === segs.length - 1;
-    const inside = bias === 'start' ? outputMs < acc + len : outputMs <= acc + len;
-    if (inside || (isLast && outputMs === acc + len)) {
-      return seg.sourceStartMs + (outputMs - acc);
-    }
-    acc += len;
-  }
-  return null;
+  return createTimeMap(edl, speeds, defaultSpeed).toSource(outputMs, bias);
 }
+
+export function outputDurationMs(edl: readonly EdlSegment[], speeds: readonly SpeedRange[] = [], defaultSpeed = 1): number {
+  if (speeds.length === 0 && defaultSpeed === 1) {
+    return enabledSorted(edl).reduce((acc, s) => acc + (s.sourceEndMs - s.sourceStartMs), 0);
+  }
+  return createTimeMap(edl, speeds, defaultSpeed).totalOutMs;
+}
+
+// ── 조회 ────────────────────────────────────────────────────────────────────
 
 export function segmentAt(edl: readonly EdlSegment[], sourceMs: number): EdlSegment | undefined {
   return sortSegments(edl).find((s) => sourceMs >= s.sourceStartMs && sourceMs < s.sourceEndMs);
@@ -98,25 +216,7 @@ export function prevKeptSourceMs(sourceMs: number, edl: readonly EdlSegment[]): 
   return null;
 }
 
-export function mergeRanges(ranges: readonly TimeRange[]): TimeRange[] {
-  const sorted = ranges.filter((r) => r.endMs > r.startMs).sort((a, b) => a.startMs - b.startMs);
-  const out: TimeRange[] = [];
-  for (const r of sorted) {
-    const last = out[out.length - 1];
-    if (last && r.startMs <= last.endMs) last.endMs = Math.max(last.endMs, r.endMs);
-    else out.push({ startMs: r.startMs, endMs: r.endMs });
-  }
-  return out;
-}
-
-/** 내보내기에 들어갈 원본 구간(맞닿은 구간은 하나로 합침). */
-export function keptRanges(edl: readonly EdlSegment[]): TimeRange[] {
-  return mergeRanges(enabledSorted(edl).map((s) => ({ startMs: s.sourceStartMs, endMs: s.sourceEndMs })));
-}
-
-export function removedRanges(edl: readonly EdlSegment[]): TimeRange[] {
-  return mergeRanges(sortSegments(edl).filter((s) => !s.enabled).map((s) => ({ startMs: s.sourceStartMs, endMs: s.sourceEndMs })));
-}
+// ── 편집 ────────────────────────────────────────────────────────────────────
 
 function splitInternal(
   edl: readonly EdlSegment[], sourceMs: number, rightOrigin: EdlOrigin | null, idGen: IdGen, now: number,
@@ -166,6 +266,20 @@ export function applySuggestions(
       : s));
   }
   return out;
+}
+
+/** 특정 구간 안에서 잘라냈던 것을 되살린다 (단어 칩 되돌리기 F-01-3에서 쓴다) */
+export function restoreRange(edl: readonly EdlSegment[], range: TimeRange, now = 0): EdlSegment[] {
+  const start = Math.round(range.startMs);
+  const end = Math.round(range.endMs);
+  if (end <= start) return edl as EdlSegment[];
+  let changed = false;
+  const out = edl.map((s) => {
+    if (s.enabled || s.sourceStartMs >= end || s.sourceEndMs <= start) return s;
+    changed = true;
+    return { ...s, enabled: true, updatedAt: now };
+  });
+  return changed ? out : (edl as EdlSegment[]);
 }
 
 const isAuto = (o: EdlOrigin) => o === 'auto-silence' || o === 'auto-filler';

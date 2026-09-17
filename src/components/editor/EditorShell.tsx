@@ -6,6 +6,9 @@ import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useProjectStore } from '@/store/projectStore';
 import { useTimelineStore } from '@/store/timelineStore';
+import { useUiStore } from '@/store/uiStore';
+import { ClipList } from './ClipList/ClipList';
+import { ClipToolbar } from './ClipList/ClipToolbar';
 import { EditorTopBar } from './EditorTopBar';
 import { PanelHost } from './PanelHost';
 import { PreviewCanvas } from './PreviewCanvas';
@@ -18,6 +21,7 @@ export function EditorShell({ projectId }: { projectId: string }) {
   const status = useProjectStore((s) => s.status);
   const error = useProjectStore((s) => s.error);
   const asset = useProjectStore((s) => s.asset);
+  const timelineOpen = useUiStore((s) => s.timelineOpen);
 
   useEffect(() => {
     void useProjectStore.getState().load(projectId);
@@ -67,11 +71,15 @@ export function EditorShell({ projectId }: { projectId: string }) {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <PanelHost />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="relative min-h-[180px] flex-1 bg-black/40 p-2">
+          <div className="relative min-h-[180px] shrink-0 basis-[38%] bg-black/40 p-2">
             <PreviewCanvas />
           </div>
           <TransportBar />
-          <TimelineRoot />
+          <ClipToolbar />
+          <div className="min-h-0 flex-1">
+            <ClipList />
+          </div>
+          {timelineOpen && <TimelineRoot />}
         </div>
       </div>
     </div>

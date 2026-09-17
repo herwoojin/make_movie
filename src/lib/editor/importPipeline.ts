@@ -2,6 +2,7 @@
 // 파형·썸네일은 에디터가 열린 뒤 백그라운드로 만든다 — 타임라인을 먼저 띄워 기다리는 느낌을 줄이기 위해.
 import { nanoid } from 'nanoid';
 import type { MediaAsset, Project } from '@/types/models';
+import { DEFAULT_PROJECT_VIEW } from '@/types/editor';
 import { decodeToMono16k } from '@/lib/audio/decode';
 import { createInitialEdl } from '@/lib/core/edl';
 import { AppError, throwIfAborted, toAppError } from '@/lib/errors';
@@ -65,6 +66,7 @@ export async function createProjectFromFile(
   const project: Project = {
     id: projectId, name: file.name.replace(/\.[^.]+$/, ''), durationMs: probe.durationMs, sourceDurationMs: probe.durationMs,
     width: probe.width, height: probe.height, fps: probe.fps, status: 'draft', createdAt: now, updatedAt: now, schemaVersion: SCHEMA_VERSION,
+    ...DEFAULT_PROJECT_VIEW, pipelineStage: 1, sourceTool: 'import',
   };
   const asset: MediaAsset = {
     id: assetId, projectId, kind: 'video', fileName: file.name, fileSize: file.size, mimeType: file.type || `video/${ext}`,

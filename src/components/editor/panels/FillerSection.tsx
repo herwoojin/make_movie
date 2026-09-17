@@ -12,7 +12,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { useUiStore } from '@/store/uiStore';
 
 export function FillerSection() {
-  const words = useProjectStore((s) => s.words);
+  const words = useProjectStore((s) => s.doc.words);
   const [fillers, setFillers] = useState<FillerEntry[]>(DEFAULT_FILLERS);
   const [newWord, setNewWord] = useState('');
   useEffect(() => setFillers(settings.getFillers()), []);

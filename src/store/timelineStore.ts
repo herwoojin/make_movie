@@ -10,7 +10,8 @@ interface TimelineState {
   pxPerSec: number;
   durationMs: number;
   selectedSegmentId: string | null;
-  selectedCueId: string | null;
+  /** 클립 목록 체크박스 선택 (v2). 휘발성이라 저장하지 않는다 */
+  selectedClipIds: string[];
   selectedTrackId: string | null;
   setCurrentMs: (ms: number) => void;
   setPlaying: (playing: boolean) => void;
@@ -19,7 +20,8 @@ interface TimelineState {
   zoomBy: (factor: number) => void;
   fitToWidth: (widthPx: number) => void;
   selectSegment: (id: string | null) => void;
-  selectCue: (id: string | null) => void;
+  toggleClipSelected: (id: string) => void;
+  setSelectedClips: (ids: string[]) => void;
   selectTrack: (id: string | null) => void;
   reset: () => void;
 }
@@ -32,7 +34,7 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   pxPerSec: 50,
   durationMs: 0,
   selectedSegmentId: null,
-  selectedCueId: null,
+  selectedClipIds: [],
   selectedTrackId: null,
   setCurrentMs: (ms) => {
     const next = Math.max(0, Math.round(ms));
@@ -47,7 +49,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
     if (durationMs > 0 && widthPx > 0) set({ pxPerSec: clampZoom((widthPx / durationMs) * 1000) });
   },
   selectSegment: (selectedSegmentId) => set({ selectedSegmentId }),
-  selectCue: (selectedCueId) => set({ selectedCueId }),
+  toggleClipSelected: (id) => {
+    const cur = get().selectedClipIds;
+    set({ selectedClipIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  },
+  setSelectedClips: (selectedClipIds) => set({ selectedClipIds }),
   selectTrack: (selectedTrackId) => set({ selectedTrackId }),
-  reset: () => set({ currentMs: 0, playing: false, selectedSegmentId: null, selectedCueId: null, selectedTrackId: null }),
+  reset: () => set({ currentMs: 0, playing: false, selectedSegmentId: null, selectedClipIds: [], selectedTrackId: null }),
 }));

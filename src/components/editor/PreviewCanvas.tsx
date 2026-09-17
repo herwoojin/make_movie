@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isSourceKept, nextKeptSourceMs, sourceToOutput } from '@/lib/core/edl';
 import { player } from '@/lib/editor/player';
 import { ensureSubtitleFonts } from '@/lib/fonts';
-import { activeCueAt } from '@/lib/subtitle/model';
+import { clipAtSourceMs, clipCaption } from '@/lib/subtitle/clipCues';
 import { renderSubtitleToCanvas } from '@/lib/subtitle/render';
 import { renderMosaicFrame } from '@/lib/vision/mosaicRender';
 import { useProjectStore } from '@/store/projectStore';
@@ -59,7 +59,7 @@ export function PreviewCanvas() {
       const t = Math.round(video.currentTime * 1000);
 
       // 재생 중에는 잘린 구간을 건너뛰어 "결과물"을 미리 보여준다 (구간 미리듣기 중에는 예외)
-      if (!video.paused && !player.checkRangeEnd(t) && !player.inRangePreview && !isSourceKept(t, doc.edl)) {
+      if (!video.paused && !player.checkRangeEnd(t) && player.skipsCuts && !isSourceKept(t, doc.edl)) {
         const next = nextKeptSourceMs(t, doc.edl);
         if (next === null) video.pause();
         else if (next > t) video.currentTime = next / 1000;
@@ -71,10 +71,10 @@ export function PreviewCanvas() {
       ctx.drawImage(video, 0, 0, W, H);
       if (ui.previewMosaic) renderMosaicFrame(ctx, doc.tracks, t, mosaicHoldMs);
       if (ui.panel === 'mosaic') drawTrackOutlines(ctx, doc.tracks, t, mosaicHoldMs, tl.selectedTrackId);
-      const out = sourceToOutput(t, doc.edl);
-      if (out === null) drawCutTint(ctx);
-      const cue = out !== null ? activeCueAt(doc.cues, out) : undefined;
-      if (cue) renderSubtitleToCanvas(ctx, cue, doc.style, W);
+      if (sourceToOutput(t, doc.edl) === null) drawCutTint(ctx);
+      // 자막은 원본 시각으로 찾는다 — 시간 변환을 한 번 더 거치지 않아 미리보기와 결과가 어긋날 여지가 없다
+      const clip = clipAtSourceMs(doc.clips, t);
+      if (clip) renderSubtitleToCanvas(ctx, { text: clipCaption(clip), styleOverride: clip.styleOverride }, doc.style, W);
       else if (ui.panel === 'style') renderSubtitleToCanvas(ctx, SAMPLE_CUE, doc.style, W);
     };
     tick();

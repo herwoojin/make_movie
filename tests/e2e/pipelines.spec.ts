@@ -102,7 +102,7 @@ test('로컬 Whisper: 한국어 단어 타임스탬프로 자막 생성 (@networ
   await importVideo(page, FIXTURES.speech);
   await openPanel(page, '자막');
   await page.getByRole('button', { name: /^자막 만들기$/ }).click();
-  const outcome = page.getByText(/자막 \d+개를 만들었습니다|말소리를 찾지 못했습니다/).or(errorToasts(page));
+  const outcome = page.getByText(/자막 클립 \d+개를 만들었습니다|말소리를 찾지 못했습니다/).or(errorToasts(page));
   await expect(outcome.first()).toBeVisible({ timeout: 540_000 });
   await expect(errorToasts(page)).toHaveCount(0);
   const first = page.getByRole('textbox', { name: /자막 글자/ }).first();

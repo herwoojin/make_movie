@@ -1,5 +1,6 @@
 // 여러 곳(단축키·재생바·타임라인·패널)에서 같은 편집 명령을 쓰기 위한 액션 모음.
 import { nanoid } from 'nanoid';
+import { renumberClips } from '@/lib/core/clips';
 import { moveBoundary, segmentAt, sortSegments, splitAt, toggleSegment } from '@/lib/core/edl';
 import { frameDurationMs } from '@/lib/core/timecode';
 import type { Box } from '@/lib/vision/tracker';
@@ -70,6 +71,37 @@ export function addManualMosaic(box: Box): void {
   });
   useTimelineStore.getState().selectTrack(id);
   useUiStore.getState().toast({ kind: 'success', title: '지금 위치부터 3초 동안 가립니다.', hint: '모자이크 목록에서 시작·끝을 현재 위치로 맞출 수 있습니다.' });
+}
+
+/** 음성 인식 없이 자막을 넣을 때: 재생 위치에 2초짜리 빈 클립을 만든다 (단어 칩은 없다) */
+export function addClipAtPlayhead(): void {
+  const { project, asset, doc, edit } = useProjectStore.getState();
+  if (!project || !asset) return;
+  const start = useTimelineStore.getState().currentMs;
+  const end = Math.min(asset.durationMs, start + 2000);
+  if (end - start < 100) {
+    useUiStore.getState().toast({ kind: 'info', title: '여기서는 자막을 넣을 공간이 부족합니다.', hint: '재생헤드를 앞쪽으로 옮겨 주세요.' });
+    return;
+  }
+  const id = `clip-${nanoid(8)}`;
+  edit('자막 클립 추가', (d) => {
+    d.clips = renumberClips([...doc.clips, {
+      id, projectId: project.id, idx: d.clips.length, sourceKind: 'video-edit',
+      sourceStartMs: start, sourceEndMs: end,
+      captionText: '', captionTextOriginal: '', captionEdited: false, enabled: true, speed: 1,
+    }]);
+  });
+  useTimelineStore.getState().setSelectedClips([id]);
+}
+
+/** 체크한 클립 빼기. 선택이 없으면 false를 돌려줘서 호출한 쪽이 다른 동작을 하게 한다 */
+export function deleteSelectedClips(): boolean {
+  const ids = useTimelineStore.getState().selectedClipIds;
+  if (ids.length === 0) return false;
+  useProjectStore.getState().removeClips(ids);
+  useTimelineStore.getState().setSelectedClips([]);
+  useUiStore.getState().toast({ kind: 'success', title: `클립 ${ids.length}개를 뺐습니다.`, hint: 'Ctrl+Z로 되살릴 수 있습니다.' });
+  return true;
 }
 
 export function undoWithToast(): void {

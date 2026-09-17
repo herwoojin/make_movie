@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Section } from '@/components/ui/field';
 import { Label, NativeSelect, Switch } from '@/components/ui/misc';
+import { clipSpeedRanges } from '@/lib/core/clips';
 import { outputDurationMs } from '@/lib/core/edl';
 import { formatDuration } from '@/lib/core/timecode';
 import { estimateExportMs, runExport, type ExportResult, type UsedEncoder } from '@/lib/encode';
@@ -34,14 +35,14 @@ export function ExportPanel() {
 
   useEffect(() => { setPresetId(settings.getExportPreset()); setEncoderPref(settings.getEncoder()); }, []);
 
-  const hasCues = doc.cues.some((c) => !c.orphan);
+  const hasCues = doc.clips.some((c) => c.enabled && c.captionText.trim());
   const hasTracks = doc.tracks.some((t) => t.enabled && t.keyframes.length > 0);
   const preset = getPreset(presetId);
   const isVideo = preset.format === 'mp4' || preset.format === 'gif';
   const opts = { presetId, encoderPref, burnSubtitles: burn && hasCues && isVideo, applyMosaic: mosaic && hasTracks && isVideo, mosaicHoldMs: holdMs };
   const estimate = useMemo(() => (asset ? estimateExportMs(asset, doc, opts) : null), [asset, doc, presetId, encoderPref, burn, mosaic]); // eslint-disable-line react-hooks/exhaustive-deps
   const size = asset ? resolveOutputSize(preset, asset.width ?? 0, asset.height ?? 0) : null;
-  const outMs = outputDurationMs(doc.edl);
+  const outMs = outputDurationMs(doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
 
   const start = async () => {
     const { project, asset: a, source } = useProjectStore.getState();

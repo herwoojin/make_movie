@@ -41,7 +41,7 @@ describe('ass', () => {
   });
 
   it('배경 박스가 있으면 BorderStyle 3', () => {
-    const ass = toAss([cue(0, 1000, 'a')], { ...DEFAULT_STYLE_VALUES, bgOpacity: 0.6, shadowBlur: 0 }, 1920, 1080);
+    const ass = toAss([cue(0, 1000, 'a')], { ...DEFAULT_STYLE_VALUES, bgEnabled: true, bgOpacity: 0.6, shadowBlur: 0 }, 1920, 1080);
     const fields = ass.split('\n').find((l) => l.startsWith('Style:'))!.split(',');
     expect(fields[15]).toBe('3');
     expect(fields[17]).toBe('0');

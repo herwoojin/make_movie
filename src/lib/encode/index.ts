@@ -2,7 +2,9 @@
 import { nanoid } from 'nanoid';
 import type { EncoderId, ExportJob, MediaAsset, Project } from '@/types/models';
 import type { EditorDoc } from '@/types/editor';
+import { clipSpeedRanges } from '@/lib/core/clips';
 import { keptRanges, outputDurationMs } from '@/lib/core/edl';
+import { clipsToCues } from '@/lib/subtitle/clipCues';
 import { checkEnv } from '@/lib/env/capabilities';
 import { toAppError } from '@/lib/errors';
 import { isMp4Like } from '@/lib/media/probeClient';
@@ -48,7 +50,8 @@ export interface ExportResult {
 export function buildRenderJob(asset: MediaAsset, doc: EditorDoc, opts: ExportOptions): { job: RenderJob; preset: ExportPresetDef } {
   const preset = getPreset(opts.presetId);
   const size = resolveOutputSize(preset, asset.width ?? 0, asset.height ?? 0);
-  const cues = doc.cues.filter((c) => !c.orphan && c.text.trim());
+  // 자막은 클립에서 만든다 (v2). 결과물 시간으로 옮겨 굽는다.
+  const cues = clipsToCues(doc.clips, doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
   const job: RenderJob = {
     edl: doc.edl,
     subtitles: opts.burnSubtitles && cues.length ? cues : undefined,
@@ -83,7 +86,7 @@ export function pickEncoder(pref: EncoderPreference, asset: Pick<MediaAsset, 'fi
 export function estimateExportMs(asset: MediaAsset, doc: EditorDoc, opts: ExportOptions): { encoder: UsedEncoder; ms: number } {
   const { job } = buildRenderJob(asset, doc, opts);
   const { encoder } = pickEncoder(opts.encoderPref, asset, job.output.format);
-  const outMs = outputDurationMs(doc.edl);
+  const outMs = outputDurationMs(doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
   if (encoder === 'ffmpeg-wasm') {
     const mt = typeof self !== 'undefined' && self.crossOriginIsolated === true;
     return { encoder, ms: estimateFfmpegMs(outMs, job.output.width, job.output.height, mt) };

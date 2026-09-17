@@ -59,7 +59,7 @@ describe('renderSubtitleToCanvas', () => {
 
   it('배경 박스와 styleOverride, 왼쪽·위 정렬, 외곽선 없음', () => {
     const { ctx, calls } = fakeCtx(1280, 720);
-    renderSubtitleToCanvas(ctx, { text: '박스', styleOverride: { bgOpacity: 0.5, outlineWidth: 0, shadowBlur: 0, alignment: 'left', verticalPosition: 'top' } }, style, 1280);
+    renderSubtitleToCanvas(ctx, { text: '박스', styleOverride: { bgEnabled: true, bgOpacity: 0.5, outlineEnabled: false, shadowBlur: 0, alignment: 'left', verticalPosition: 'top' } }, style, 1280);
     expect(calls.some((c) => c.op === 'fill')).toBe(true);
     expect(calls.filter((c) => c.op === 'strokeText')).toHaveLength(0);
     const fill = calls.find((c) => c.op === 'fillText')!;
@@ -72,7 +72,7 @@ describe('renderSubtitleToCanvas', () => {
 
   it('오른쪽·가운데(세로) 정렬', () => {
     const { ctx, calls } = fakeCtx();
-    renderSubtitleToCanvas(ctx, { text: '오른쪽' }, { ...style, alignment: 'right', verticalPosition: 'middle', bgOpacity: 0.3 }, 1920);
+    renderSubtitleToCanvas(ctx, { text: '오른쪽' }, { ...style, alignment: 'right', verticalPosition: 'middle', bgEnabled: true, bgOpacity: 0.3 }, 1920);
     const fill = calls.find((c) => c.op === 'fillText')!;
     expect(fill.args[1]).toBe(1920 - 40 - style.bgPaddingX);
     expect(Math.abs((fill.args[2] as number) - 540)).toBeLessThan(1);

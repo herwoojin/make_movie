@@ -1,13 +1,14 @@
-// IndexedDB 스키마 (ERD 3장). 바이너리는 OPFS, 여기는 편집 데이터(수 MB 수준)만.
+// IndexedDB 스키마 (ERD 3장 + v2 증분). 바이너리는 OPFS, 여기는 편집 데이터(수 MB 수준)만.
 import Dexie, { type Table } from 'dexie';
 import type {
-  CutSuggestion, EdlSegment, ExportJob, HistoryEntry, MediaAsset, MosaicKeyframe, MosaicTrack, Project,
-  StylePresetRecord, SubtitleCue, SubtitleStyle, Thumbnail, Transcript, TranscriptWord, Waveform,
+  CutSuggestion, EdlSegment, EditClip, ExportJob, Glossary, HistoryEntry, MediaAsset, MosaicKeyframe, MosaicTrack,
+  Project, SavedResult, StylePresetRecord, SubtitleCue, SubtitleStyle, Thumbnail, Transcript, TranscriptWord,
+  VoiceProfile, Waveform,
 } from '@/types/models';
 
 export type * from '@/types/models';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export class EditOnDB extends Dexie {
   projects!: Table<Project, string>;
@@ -25,6 +26,11 @@ export class EditOnDB extends Dexie {
   exportJobs!: Table<ExportJob, string>;
   history!: Table<HistoryEntry, string>;
   stylePresets!: Table<StylePresetRecord, string>;
+  // ── v2 ──────────────────────────────────────────────
+  editClips!: Table<EditClip, string>;
+  savedResults!: Table<SavedResult, string>;
+  voiceProfiles!: Table<VoiceProfile, string>;
+  glossaries!: Table<Glossary, string>;
 
   constructor(name = 'editon') {
     super(name);
@@ -45,6 +51,66 @@ export class EditOnDB extends Dexie {
       history: 'id, projectId, [projectId+seq]',
       // ERD 외 추가: 로그인 없이도 쓰는 로컬 자막 스타일 프리셋
       stylePresets: 'id, updatedAt',
+    });
+
+    // v2: 단어 칩 편집(EditClip) · 최근 저장 결과 · 음성 프로필 · 용어집
+    this.version(2).stores({
+      transcriptWords: 'id, transcriptId, [transcriptId+idx], startMs, isFiller, clipId',
+      editClips: 'id, projectId, [projectId+idx], enabled',
+      savedResults: 'id, createdAt, kind, toolId',
+      voiceProfiles: 'id, emotion, updatedAt',
+      glossaries: 'id, updatedAt',
+    }).upgrade(async (tx) => {
+      await tx.table('projects').toCollection().modify((p: Project) => {
+        p.aspectMode ??= 'original';
+        p.reframe ??= { x: 0.5, y: 0.5, scale: 1 };
+        p.fillMode ??= 'blur';
+        p.globalSpeed ??= 1;
+        p.pitchPreserve ??= true;
+        p.pipelineStage ??= 2;
+        p.sourceTool ??= 'import';
+        p.schemaVersion = 2;
+      });
+      await tx.table('subtitleStyles').toCollection().modify((s: SubtitleStyle) => {
+        s.italic ??= false;
+        s.outlineEnabled ??= s.outlineWidth > 0;
+        s.bgEnabled ??= s.bgOpacity > 0;
+      });
+      await tx.table('transcriptWords').toCollection().modify((w: TranscriptWord) => {
+        w.clipId ??= '';
+        w.deleted ??= false;
+      });
+      // v1의 자막 큐를 v2 편집 클립으로 옮긴다 (SubtitleCue는 이후 SRT 입출력 중간 표현으로만 쓴다)
+      const cues = (await tx.table('subtitleCues').toArray()) as SubtitleCue[];
+      if (cues.length > 0) {
+        const byProject = new Map<string, SubtitleCue[]>();
+        for (const cue of cues) {
+          const list = byProject.get(cue.projectId) ?? [];
+          list.push(cue);
+          byProject.set(cue.projectId, list);
+        }
+        const clips: EditClip[] = [];
+        for (const [projectId, list] of byProject) {
+          list.sort((a, b) => a.sourceStartMs - b.sourceStartMs);
+          list.forEach((cue, idx) => {
+            clips.push({
+              id: `clip-${cue.id}`,
+              projectId,
+              idx,
+              sourceKind: 'video-edit',
+              sourceStartMs: cue.sourceStartMs,
+              sourceEndMs: cue.sourceEndMs,
+              captionText: cue.text,
+              captionTextOriginal: cue.text,
+              captionEdited: false,
+              enabled: !cue.orphan,
+              speed: 1,
+              ...(cue.styleOverride ? { styleOverride: cue.styleOverride } : {}),
+            });
+          });
+        }
+        await tx.table('editClips').bulkAdd(clips);
+      }
     });
   }
 }
@@ -71,6 +137,7 @@ export async function deleteProjectRecords(db: EditOnDB, projectId: string): Pro
       db.transcripts.where('projectId').equals(projectId).delete(),
       db.subtitleCues.where('projectId').equals(projectId).delete(),
       db.subtitleStyles.where('projectId').equals(projectId).delete(),
+      db.editClips.where('projectId').equals(projectId).delete(),
       db.mosaicTracks.where('projectId').equals(projectId).delete(),
       db.exportJobs.where('projectId').equals(projectId).delete(),
       db.history.where('projectId').equals(projectId).delete(),

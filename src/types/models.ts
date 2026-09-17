@@ -2,10 +2,24 @@
 
 export type ProjectStatus = 'draft' | 'editing' | 'exporting' | 'done';
 
+/** v2: 화면 비율은 편집 중에 바꾼다. 원본은 건드리지 않고 렌더 시점 변환으로만 처리한다 */
+export type AspectMode = 'original' | '16:9' | '9:16';
+export type FillMode = 'blur' | 'solid' | 'crop';
+
+/** 비율을 바꿨을 때 "원본의 어느 부분을 보여줄지" (0~1 정규화 중심 + 배율) */
+export interface ReframeBox {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export type PipelineStage = 1 | 2;
+export type SourceTool = 'auto-edit' | 'translate' | 'import' | 'dub' | 'mosaic';
+
 export interface Project {
   id: string;
   name: string;
-  durationMs: number;         // EDL 적용 후 결과 길이
+  durationMs: number;         // EDL + 배속 적용 후 결과 길이
   sourceDurationMs: number;   // 원본 길이
   width: number;
   height: number;
@@ -14,6 +28,14 @@ export interface Project {
   createdAt: number;
   updatedAt: number;
   schemaVersion: number;
+  // ── v2 ─────────────────────────────────────────────
+  aspectMode: AspectMode;
+  reframe: ReframeBox;
+  fillMode: FillMode;
+  globalSpeed: number;
+  pitchPreserve: boolean;
+  pipelineStage: PipelineStage;
+  sourceTool: SourceTool;
 }
 
 export interface MediaAsset {
@@ -84,6 +106,33 @@ export interface TranscriptWord {
   text: string;
   confidence?: number;
   isFiller: boolean;
+  // ── v2: 단어 칩 편집 ────────────────────────────────
+  /** 어느 클립(자막 한 줄)에 속하는지 */
+  clipId: string;
+  /** 사용자가 ⊗로 지웠는가. 실제 삭제가 아니라 플래그 — 원본 배열은 보존한다 */
+  deleted: boolean;
+  /** 되돌리기 순서용 */
+  deletedAt?: number;
+}
+
+export type ClipSourceKind = 'video-edit' | 'source-audio';
+
+/** v2 편집의 기본 단위: 자막 한 줄 + 그에 속한 단어들 + 시간 구간 */
+export interface EditClip {
+  id: string;
+  projectId: string;
+  idx: number;                    // 화면 표시 번호 (0부터, UI에서 +1)
+  sourceKind: ClipSourceKind;     // 배지: '영상편집' | '원어 음성'
+  sourceStartMs: number;          // 원본 기준 시작
+  sourceEndMs: number;            // 원본 기준 끝
+  captionText: string;            // 하단 자막 줄 (사용자 수정 가능)
+  captionTextOriginal: string;    // 단어에서 자동 생성된 원본 (되돌리기용)
+  captionEdited: boolean;         // 사용자가 직접 고쳤는가
+  translatedText?: string;        // 번역 모드일 때 한국어 자막
+  enabled: boolean;               // false = 클립 전체 제외
+  speed: number;                  // 배속 (1.0 = 원속도)
+  /** 이 클립만의 서식. 별도 테이블 대신 클립에 직접 담는다(두 곳을 동기화하면 버그가 난다) */
+  styleOverride?: Partial<SubtitleStyle>;
 }
 
 export interface SubtitleCue {
@@ -109,9 +158,12 @@ export interface SubtitleStyle {
   fontFamily: string;
   fontSize: number;           // px, 가로 1920 기준
   fontWeight: number;
+  italic: boolean;            // v2
   color: string;
+  outlineEnabled: boolean;    // v2: 색·두께와 별개로 켜고 끄기
   outlineColor: string;
   outlineWidth: number;
+  bgEnabled: boolean;         // v2
   shadowBlur: number;
   bgColor: string;
   bgOpacity: number;          // 0~1
@@ -219,6 +271,47 @@ export interface WordLike {
   endMs: number;
   text: string;
   confidence?: number;
+}
+
+// ── v2 신규 테이블 ─────────────────────────────────────────────────────────
+
+export type SavedResultKind = 'video' | 'gif' | 'audio' | 'subtitle' | 'image' | 'document';
+
+/** 최근 저장 결과 (F-11). 도구가 늘어날수록 "방금 만든 그 파일"을 다시 찾기 어려워진다 */
+export interface SavedResult {
+  id: string;
+  kind: SavedResultKind;
+  toolId: string;              // 'auto-edit' | 'translate' | 'tts' | 'compress' | ...
+  fileName: string;
+  fileSize: number;
+  durationMs?: number;
+  opfsPath?: string;           // 브라우저 저장분
+  localPath?: string;          // 사이드카 저장분
+  thumbnail?: string;          // 작은 미리보기 (data URL)
+  projectId?: string;          // 되돌아가서 재편집할 프로젝트
+  createdAt: number;
+}
+
+export type VoiceEmotion = 'default' | 'calm' | 'bright' | 'serious' | 'sad' | 'emphatic';
+
+/** 감정별 참조 음성 (F-08). 감정은 프롬프트가 아니라 "그 감정으로 녹음해둔 샘플"로 표현한다 */
+export interface VoiceProfile {
+  id: string;
+  emotion: VoiceEmotion;
+  label: string;
+  opfsPath: string;            // 녹음 WAV
+  refText: string;             // 그 녹음에서 읽은 문장
+  sampleRate: number;
+  durationMs: number;
+  updatedAt: number;
+}
+
+/** 용어 지정 (F-07). "Sunburst=선버스트" 같은 고유명사 대응표 */
+export interface Glossary {
+  id: string;
+  name: string;
+  entries: { from: string; to: string }[];
+  updatedAt: number;
 }
 
 export interface TimeRange {

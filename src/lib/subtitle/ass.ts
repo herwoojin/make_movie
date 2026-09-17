@@ -35,9 +35,9 @@ function escapeText(text: string): string {
 
 export function toAss(cues: readonly SubtitleCue[], style: StyleValues, videoWidth: number, videoHeight: number): string {
   const scale = videoWidth / 1920;
-  const box = style.bgOpacity > 0;
+  const box = style.bgEnabled && style.bgOpacity > 0;
   const fontSize = Math.round(style.fontSize * scale * ASS_FONT_SCALE);
-  const outline = box ? Math.round(style.bgPaddingY * scale) : Math.round(style.outlineWidth * scale);
+  const outline = box ? Math.round(style.bgPaddingY * scale) : Math.round(style.outlineEnabled ? style.outlineWidth * scale : 0);
   const shadow = style.shadowBlur > 0 ? Math.max(1, Math.round((style.shadowBlur * scale) / 2)) : 0;
   const marginV = Math.round(style.marginBottom * scale);
   const marginH = Math.round(40 * scale);
@@ -45,7 +45,7 @@ export function toAss(cues: readonly SubtitleCue[], style: StyleValues, videoWid
   const outlineColour = box ? assColor(style.bgColor, style.bgOpacity) : assColor(style.outlineColor);
   const styleLine = [
     'Default', style.fontFamily, fontSize, assColor(style.color), assColor(style.color), outlineColour,
-    assColor('#000000', 0.5), style.fontWeight >= 600 ? -1 : 0, 0, 0, 0, 100, 100, 0, 0,
+    assColor('#000000', 0.5), style.fontWeight >= 600 ? -1 : 0, style.italic ? -1 : 0, 0, 0, 100, 100, 0, 0,
     box ? 3 : 1, outline, shadow, assAlignment(style), marginH, marginH, marginV, 1,
   ].join(',');
 

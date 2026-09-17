@@ -3,7 +3,7 @@ import type { EditorDoc } from '@/types/editor';
 import { createHistory } from '@/lib/core/undo';
 import { AppError } from '@/lib/errors';
 import { probeMedia } from '@/lib/media/probeClient';
-import { isSameSource, loadProjectBundle, parseProjectFile, saveProjectDoc } from '@/lib/storage/projectRepo';
+import { isSameSource, loadProjectBundle, parseProjectFile, saveImportedWords, saveProjectDoc } from '@/lib/storage/projectRepo';
 import { formatBytes } from '@/lib/utils';
 import { createProjectFromFile, type ImportProgress } from './importPipeline';
 
@@ -23,16 +23,20 @@ export async function importEditonProject(json: unknown, video: File, onProgress
   const pid = (id: string) => `${projectId}-${id}`;
   const doc: EditorDoc = {
     edl: file.edlSegments.map((s) => ({ ...s, id: pid(s.id), projectId, assetId })),
-    cues: file.subtitleCues.map((c) => ({
-      ...c, id: pid(c.id), projectId, orphan: c.orphan ?? false,
-      sourceStartMs: c.sourceStartMs ?? c.startMs, sourceEndMs: c.sourceEndMs ?? c.endMs,
-    })),
+    clips: file.clips.map((c) => ({ ...c, id: pid(c.id), projectId })),
+    words: file.words.map((w) => ({ ...w, id: pid(w.id), clipId: pid(w.clipId) })),
+    view: file.view,
     style: { ...file.subtitleStyle, id: `style-${projectId}`, projectId },
     tracks: file.mosaicTracks.map(({ track, keyframes }) => {
       const trackId = pid(track.id);
       return { ...track, id: trackId, projectId, keyframes: keyframes.map((k) => ({ ...k, id: pid(k.id), trackId })) };
     }),
   };
+  // 단어는 transcript에 매달려 있으므로 새 프로젝트용 transcript를 만들어 붙인다
+  if (doc.words.length) {
+    const transcript = await saveImportedWords(projectId, doc.words.map((w) => ({ ...w, transcriptId: `tr-${projectId}` })));
+    doc.words = doc.words.map((w) => ({ ...w, transcriptId: transcript.id }));
+  }
   await saveProjectDoc({ ...bundle.project, name: file.project.name }, doc, [], createHistory());
   return projectId;
 }

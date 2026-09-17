@@ -1,9 +1,10 @@
 // 프로젝트 영속화 (IndexedDB + OPFS). 스토어·화면은 이 모듈만 거쳐 저장소에 접근한다.
 import { nanoid } from 'nanoid';
 import type {
-  CutSuggestion, MediaAsset, Project, StyleValues, SubtitleStyle, Transcript, TranscriptWord,
+  CutSuggestion, EditClip, MediaAsset, Project, StyleValues, SubtitleStyle, Transcript, TranscriptWord,
 } from '@/types/models';
-import type { EditorDoc, MosaicTrackDoc } from '@/types/editor';
+import { DEFAULT_PROJECT_VIEW, type EditorDoc, type MosaicTrackDoc, type ProjectView } from '@/types/editor';
+import { clipSpeedRanges } from '@/lib/core/clips';
 import { outputDurationMs } from '@/lib/core/edl';
 import type { UndoEntry, UndoHistory } from '@/lib/core/undo';
 import { AppError } from '@/lib/errors';
@@ -20,12 +21,21 @@ export interface ProjectBundle {
   suggestions: CutSuggestion[];
   peaks: Int8Array | null;
   transcript: Transcript | null;
-  words: TranscriptWord[];
   history: UndoEntry[];
 }
 
 export function defaultStyle(projectId: string, values: StyleValues = DEFAULT_STYLE_VALUES): SubtitleStyle {
   return { ...values, id: `style-${projectId}`, projectId };
+}
+
+export function projectView(project: Project): ProjectView {
+  return {
+    aspectMode: project.aspectMode ?? DEFAULT_PROJECT_VIEW.aspectMode,
+    reframe: project.reframe ?? DEFAULT_PROJECT_VIEW.reframe,
+    fillMode: project.fillMode ?? DEFAULT_PROJECT_VIEW.fillMode,
+    globalSpeed: project.globalSpeed ?? DEFAULT_PROJECT_VIEW.globalSpeed,
+    pitchPreserve: project.pitchPreserve ?? DEFAULT_PROJECT_VIEW.pitchPreserve,
+  };
 }
 
 export async function listProjects(): Promise<Project[]> {
@@ -39,9 +49,9 @@ export async function loadProjectBundle(projectId: string): Promise<ProjectBundl
   const asset = await db.mediaAssets.where('projectId').equals(projectId).first();
   if (!asset) throw new AppError('NOT_FOUND', '프로젝트의 원본 정보가 없습니다.', '영상을 새로 올려 주세요.');
 
-  const [edl, cues, styleRow, tracks, suggestions, waveform, transcript, history] = await Promise.all([
+  const [edl, clips, styleRow, tracks, suggestions, waveform, transcript, history] = await Promise.all([
     db.edlSegments.where('[projectId+order]').between([projectId, -Infinity], [projectId, Infinity]).toArray(),
-    db.subtitleCues.where('[projectId+idx]').between([projectId, -Infinity], [projectId, Infinity]).toArray(),
+    db.editClips.where('[projectId+idx]').between([projectId, -Infinity], [projectId, Infinity]).toArray(),
     db.subtitleStyles.where('projectId').equals(projectId).first(),
     db.mosaicTracks.where('projectId').equals(projectId).toArray(),
     db.cutSuggestions.where('projectId').equals(projectId).sortBy('startMs'),
@@ -60,11 +70,10 @@ export async function loadProjectBundle(projectId: string): Promise<ProjectBundl
   return {
     project,
     asset,
-    doc: { edl, cues, style: styleRow ?? defaultStyle(projectId), tracks: trackDocs },
+    doc: { edl, clips, words, style: styleRow ?? defaultStyle(projectId), tracks: trackDocs, view: projectView(project) },
     suggestions,
     peaks: waveform ? new Int8Array(waveform.peaks) : null,
     transcript: transcript ?? null,
-    words,
     history: history.map((h) => {
       const parsed = JSON.parse(h.inversePatch) as Pick<UndoEntry, 'patches' | 'inverse'>;
       return { label: h.commandType, patches: parsed.patches, inverse: parsed.inverse };
@@ -76,14 +85,26 @@ export async function loadProjectBundle(projectId: string): Promise<ProjectBundl
 export async function saveProjectDoc(project: Project, doc: EditorDoc, suggestions: CutSuggestion[], history: UndoHistory): Promise<Project> {
   const db = getDb();
   const now = Date.now();
-  const next: Project = { ...project, durationMs: outputDurationMs(doc.edl), updatedAt: now, status: project.status === 'draft' ? 'editing' : project.status };
+  const speeds = clipSpeedRanges(doc.clips);
+  const next: Project = {
+    ...project,
+    durationMs: outputDurationMs(doc.edl, speeds, doc.view.globalSpeed),
+    updatedAt: now,
+    status: project.status === 'draft' ? 'editing' : project.status,
+    aspectMode: doc.view.aspectMode,
+    reframe: doc.view.reframe,
+    fillMode: doc.view.fillMode,
+    globalSpeed: doc.view.globalSpeed,
+    pitchPreserve: doc.view.pitchPreserve,
+  };
   const oldTrackIds = await db.mosaicTracks.where('projectId').equals(project.id).primaryKeys();
-  await db.transaction('rw', [db.projects, db.edlSegments, db.subtitleCues, db.subtitleStyles, db.mosaicTracks, db.mosaicKeyframes, db.cutSuggestions, db.history], async () => {
+  await db.transaction('rw', [db.projects, db.edlSegments, db.editClips, db.transcriptWords, db.subtitleStyles, db.mosaicTracks, db.mosaicKeyframes, db.cutSuggestions, db.history], async () => {
     await db.projects.put(next);
     await db.edlSegments.where('projectId').equals(project.id).delete();
     await db.edlSegments.bulkPut(doc.edl);
-    await db.subtitleCues.where('projectId').equals(project.id).delete();
-    await db.subtitleCues.bulkPut(doc.cues);
+    await db.editClips.where('projectId').equals(project.id).delete();
+    await db.editClips.bulkPut(doc.clips);
+    if (doc.words.length) await db.transcriptWords.bulkPut(doc.words);
     await db.subtitleStyles.put(doc.style);
     await db.mosaicTracks.where('projectId').equals(project.id).delete();
     if (oldTrackIds.length) await db.mosaicKeyframes.where('trackId').anyOf(oldTrackIds).delete();
@@ -105,6 +126,7 @@ export async function saveWaveform(assetId: string, peaks: Int8Array, pointsPerS
   await getDb().waveforms.put({ id: `wf-${assetId}`, assetId, pointsPerSecond, peaks: buffer });
 }
 
+/** STT 결과 저장. 단어는 편집 문서(doc.words)로도 올라가고, 여기서는 원본 보관용으로 남는다 */
 export async function saveTranscript(
   projectId: string, engine: Transcript['engine'], language: string, sttWords: SttWord[], fillers: FillerEntry[],
 ): Promise<{ transcript: Transcript; words: TranscriptWord[] }> {
@@ -114,6 +136,7 @@ export async function saveTranscript(
   const words: TranscriptWord[] = sttWords.map((w, idx) => ({
     id: `${transcript.id}-${idx}`, transcriptId: transcript.id, idx, startMs: w.start, endMs: w.end, text: w.text,
     confidence: w.confidence, isFiller: fillerRanges.some((f) => w.start >= f.startMs && w.end <= f.endMs),
+    clipId: '', deleted: false,
   }));
   const old = await db.transcripts.where('projectId').equals(projectId).primaryKeys();
   await db.transaction('rw', [db.transcripts, db.transcriptWords], async () => {
@@ -125,6 +148,22 @@ export async function saveTranscript(
     await db.transcriptWords.bulkAdd(words);
   });
   return { transcript, words };
+}
+
+/** 외부 SRT로 시작할 때처럼 STT 없이 단어를 만들어야 하는 경우 */
+export async function saveImportedWords(projectId: string, words: TranscriptWord[], language = 'ko'): Promise<Transcript> {
+  const db = getDb();
+  const transcript: Transcript = { id: words[0]?.transcriptId ?? `tr-${nanoid(8)}`, projectId, engine: 'manual', language, createdAt: Date.now() };
+  const old = await db.transcripts.where('projectId').equals(projectId).primaryKeys();
+  await db.transaction('rw', [db.transcripts, db.transcriptWords], async () => {
+    if (old.length) {
+      await db.transcriptWords.where('transcriptId').anyOf(old).delete();
+      await db.transcripts.bulkDelete(old);
+    }
+    await db.transcripts.put(transcript);
+    if (words.length) await db.transcriptWords.bulkPut(words.map((w) => ({ ...w, transcriptId: transcript.id })));
+  });
+  return transcript;
 }
 
 export async function getSourceFile(asset: MediaAsset): Promise<File> {
@@ -160,16 +199,18 @@ export async function cleanupOrphans(): Promise<number> {
   return orphans.length;
 }
 
-// ── .editon.json (ERD 6.5) ─────────────────────────────────────────────
+// ── .editon.json (ERD 6.5 + v2) ────────────────────────────────────────
 
 export interface EditonProjectFile {
   format: 'editon-project';
-  version: 1;
+  version: 2;
   project: Project;
   assets: Omit<MediaAsset, 'opfsPath'>[];
   edlSegments: EditorDoc['edl'];
-  subtitleCues: EditorDoc['cues'];
+  clips: EditClip[];
+  words: TranscriptWord[];
   subtitleStyle: SubtitleStyle;
+  view: ProjectView;
   mosaicTracks: { track: Omit<MosaicTrackDoc, 'keyframes'>; keyframes: MosaicTrackDoc['keyframes'] }[];
 }
 
@@ -178,23 +219,32 @@ export async function buildProjectFile(projectId: string): Promise<EditonProject
   const { opfsPath: _p, ...asset } = b.asset;
   return {
     format: 'editon-project',
-    version: 1,
+    version: 2,
     project: b.project,
     assets: [asset],
     edlSegments: b.doc.edl,
-    subtitleCues: b.doc.cues,
+    clips: b.doc.clips,
+    words: b.doc.words,
     subtitleStyle: b.doc.style,
+    view: b.doc.view,
     mosaicTracks: b.doc.tracks.map(({ keyframes, ...track }) => ({ track, keyframes })),
   };
 }
 
 export function parseProjectFile(json: unknown): EditonProjectFile {
-  const f = json as Partial<EditonProjectFile> | null;
-  if (!f || f.format !== 'editon-project' || f.version !== 1 || !f.project || !Array.isArray(f.assets) || !f.assets[0]
-    || !Array.isArray(f.edlSegments) || !Array.isArray(f.subtitleCues) || !Array.isArray(f.mosaicTracks) || !f.subtitleStyle) {
+  const f = json as Partial<EditonProjectFile> & { subtitleCues?: unknown[] } | null;
+  if (!f || f.format !== 'editon-project' || !f.project || !Array.isArray(f.assets) || !f.assets[0]
+    || !Array.isArray(f.edlSegments) || !f.subtitleStyle) {
     throw new AppError('UNSUPPORTED_FORMAT', '편집ON 프로젝트 파일이 아니거나 손상되었습니다.', '.editon.json 파일을 다시 선택해 주세요.');
   }
-  return f as EditonProjectFile;
+  return {
+    ...f,
+    version: 2,
+    clips: Array.isArray(f.clips) ? f.clips : [],
+    words: Array.isArray(f.words) ? f.words : [],
+    view: f.view ?? DEFAULT_PROJECT_VIEW,
+    mosaicTracks: Array.isArray(f.mosaicTracks) ? f.mosaicTracks : [],
+  } as EditonProjectFile;
 }
 
 /** 원본 재연결 검증: 파일 크기가 같거나, 길이가 0.5초 이내로 같으면 같은 파일로 본다 */

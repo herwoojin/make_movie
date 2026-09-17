@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { EdlSegment } from '@/types/models';
 import {
-  applySuggestions, createInitialEdl, isSourceKept, keptRanges, mergeRanges, moveBoundary, nextKeptSourceMs,
-  outputDurationMs, outputToSource, prevKeptSourceMs, removedRanges, revertAuto, segmentAt, setSegmentEnabled,
-  sortSegments, sourceDurationMs, sourceToOutput, splitAt, toggleSegment,
+  applySuggestions, createInitialEdl, createTimeMap, isSourceKept, keptRanges, mergeRanges, moveBoundary, nextKeptSourceMs,
+  normalizeSpeed, outputDurationMs, outputToSource, prevKeptSourceMs, removedRanges, restoreRange, revertAuto, segmentAt,
+  setSegmentEnabled, sortSegments, sourceDurationMs, sourceToOutput, splitAt, toggleSegment,
 } from './edl';
 
 function ids() {
@@ -228,6 +228,71 @@ describe('moveBoundary', () => {
     const gap = [seg(0, 1000, true, 0, 'a1'), seg(1500, 2000, true, 1, 'a2')];
     expect(moveBoundary(gap, 'a1', 1200)).toBe(gap);
     expect(moveBoundary(edl, 'x0', 1000)).toBe(edl);
+  });
+});
+
+describe('배속 (v2) — 원본 → EDL → 배속 순서', () => {
+  const speeds = [{ startMs: 0, endMs: 1000, speed: 2 }];
+
+  it('배속이 없으면 v1과 똑같이 동작한다', () => {
+    expect(sourceToOutput(2500, cutMiddle())).toBe(1500);
+    expect(outputDurationMs(cutMiddle())).toBe(2000);
+  });
+
+  it('2배속 구간은 결과물에서 절반 길이가 된다', () => {
+    // 0~1000 유지(2배속 → 500), 1000~2000 삭제, 2000~3000 유지(1배속 → 1000)
+    expect(sourceToOutput(500, cutMiddle(), speeds)).toBe(250);
+    expect(sourceToOutput(1000, cutMiddle(), speeds)).toBe(500);
+    expect(sourceToOutput(2500, cutMiddle(), speeds)).toBe(1000);
+    expect(outputDurationMs(cutMiddle(), speeds)).toBe(1500);
+  });
+
+  it('결과물 → 원본 역변환도 배속을 되돌린다', () => {
+    expect(outputToSource(250, cutMiddle(), 'start', speeds)).toBe(500);
+    expect(outputToSource(500, cutMiddle(), 'start', speeds)).toBe(2000);
+    expect(outputToSource(500, cutMiddle(), 'end', speeds)).toBe(1000);
+    expect(outputToSource(1500, cutMiddle(), 'start', speeds)).toBe(3000);
+    expect(outputToSource(1501, cutMiddle(), 'start', speeds)).toBeNull();
+  });
+
+  it('전체 배속(defaultSpeed)은 구간 지정이 없는 곳에 적용된다', () => {
+    expect(outputDurationMs(cutMiddle(), [], 2)).toBe(1000);
+    expect(sourceToOutput(2500, cutMiddle(), [], 2)).toBe(750);
+  });
+
+  it('배속 경계에서 구간이 쪼개진다', () => {
+    const map = createTimeMap(createInitialEdl('p', 'a', 4000), [{ startMs: 1000, endMs: 2000, speed: 2 }]);
+    expect(map.spans.map((s) => [s.sourceStartMs, s.sourceEndMs, s.speed])).toEqual([
+      [0, 1000, 1], [1000, 2000, 2], [2000, 4000, 1],
+    ]);
+    expect(map.totalOutMs).toBe(3500);
+    expect(map.speedAt(1500)).toBe(2);
+    expect(map.speedAt(2500)).toBe(1);
+  });
+
+  it('잘못된 배속 값은 안전하게 보정된다', () => {
+    expect(normalizeSpeed(0)).toBe(1);
+    expect(normalizeSpeed(-2)).toBe(1);
+    expect(normalizeSpeed(Number.NaN)).toBe(1);
+    expect(normalizeSpeed(99)).toBe(4);
+    expect(normalizeSpeed(0.01)).toBe(0.25);
+    expect(normalizeSpeed(1.333)).toBe(1.33);
+  });
+});
+
+describe('restoreRange', () => {
+  it('그 구간에 걸친 꺼진 구간만 되살린다', () => {
+    const edl = applySuggestions(createInitialEdl('p', 'a', 5000, 0, ids()), [
+      { startMs: 1000, endMs: 2000, source: 'filler' },
+      { startMs: 3000, endMs: 4000, source: 'filler' },
+    ], ids());
+    const restored = restoreRange(edl, { startMs: 900, endMs: 2100 });
+    expect(keptRanges(restored)).toEqual([{ startMs: 0, endMs: 3000 }, { startMs: 4000, endMs: 5000 }]);
+  });
+  it('되살릴 것이 없으면 같은 배열', () => {
+    const edl = cutMiddle();
+    expect(restoreRange(edl, { startMs: 0, endMs: 500 })).toBe(edl);
+    expect(restoreRange(edl, { startMs: 100, endMs: 100 })).toBe(edl);
   });
 });
 

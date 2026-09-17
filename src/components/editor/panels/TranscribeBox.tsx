@@ -9,7 +9,6 @@ import { transcribeProject } from '@/lib/editor/transcribe';
 import { settings, type SttEnginePreference } from '@/lib/settings';
 import { saveTranscript } from '@/lib/storage/projectRepo';
 import { STT_ENGINES } from '@/lib/stt/types';
-import { renumberCues, wordsToCues } from '@/lib/subtitle/model';
 import type { Progress as WorkerProgress } from '@/lib/worker/protocol';
 import { useProjectStore } from '@/store/projectStore';
 import { useUiStore } from '@/store/uiStore';
@@ -27,7 +26,7 @@ function describe(p: WorkerProgress): { text: string; pct: number } {
 
 export function TranscribeBox() {
   const hasAudio = useProjectStore((s) => s.asset?.audioCodec !== 'none' && s.peaks !== null);
-  const cueCount = useProjectStore((s) => s.doc.cues.length);
+  const clipCount = useProjectStore((s) => s.doc.clips.length);
   const [engine, setEngine] = useState<SttEnginePreference>('local-whisper');
   const [language, setLanguage] = useState('ko');
   const [progress, setProgress] = useState<WorkerProgress | null>(null);
@@ -44,19 +43,12 @@ export function TranscribeBox() {
     try {
       const result = await transcribeProject({ project, asset, source, engine, language, signal: ctrl.signal, onProgress: setProgress });
       const { transcript, words } = await saveTranscript(project.id, engine, result.language, result.words, settings.getFillers());
-      useProjectStore.getState().setTranscript(transcript, words);
-      const { doc } = useProjectStore.getState();
-      const cues = wordsToCues(words, { projectId: project.id, maxCharsPerLine: doc.style.maxCharsPerLine, maxLines: doc.style.maxLines, edl: doc.edl });
-      useProjectStore.getState().edit('자막 자동 생성', (d) => {
-        // 잠근 자막은 사용자가 손본 것이므로 보존하고, 그 자리와 겹치는 새 자막은 넣지 않는다
-        const locked = d.cues.filter((c) => c.locked);
-        const fresh = cues.filter((c) => !locked.some((l) => c.sourceStartMs < l.sourceEndMs && c.sourceEndMs > l.sourceStartMs));
-        d.cues = renumberCues([...locked, ...fresh]);
-      });
+      useProjectStore.getState().replaceTranscript(transcript, words, { label: '자막 자동 생성' });
+      const count = useProjectStore.getState().doc.clips.length;
       useUiStore.getState().toast({
         kind: 'success',
-        title: words.length ? `자막 ${cues.length}개를 만들었습니다.` : '말소리를 찾지 못했습니다.',
-        hint: words.length ? '1단계에서 틀린 글자를 고치고, 자동 컷 패널에서 추임새도 찾아보세요.' : '언어 설정을 확인하거나 다른 엔진을 써 보세요.',
+        title: words.length ? `자막 클립 ${count}개를 만들었습니다.` : '말소리를 찾지 못했습니다.',
+        hint: words.length ? '가운데 목록에서 지우고 싶은 단어의 ⊗를 누르면 영상에서 바로 빠집니다.' : '언어 설정을 확인하거나 다른 엔진을 써 보세요.',
       });
     } catch (e) {
       useUiStore.getState().showError(e);
@@ -85,7 +77,7 @@ export function TranscribeBox() {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">{meta.description}</p>
-      {cueCount > 0 && !progress && <p className="text-xs text-amber-300">이미 있는 자막 중 잠그지 않은 것은 새로 만든 자막으로 바뀝니다. (Ctrl+Z로 되돌릴 수 있음)</p>}
+      {clipCount > 0 && !progress && <p className="text-xs text-amber-300">지금 있는 클립과 지운 단어는 새로 만든 것으로 바뀝니다. (Ctrl+Z로 되돌릴 수 있음)</p>}
       {progress && d ? (
         <div className="space-y-2" role="status">
           <p className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> {d.text}</p>

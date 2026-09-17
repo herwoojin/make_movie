@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { frameDurationMs } from '@/lib/core/timecode';
-import { redoWithToast, seekTo, splitAtPlayhead, toggleSelectedSegment, undoWithToast } from '@/lib/editor/actions';
+import { deleteSelectedClips, redoWithToast, seekTo, splitAtPlayhead, toggleSelectedSegment, undoWithToast } from '@/lib/editor/actions';
 import { player } from '@/lib/editor/player';
 import { useProjectStore } from '@/store/projectStore';
 import { useUiStore, type PanelId } from '@/store/uiStore';
@@ -61,7 +61,8 @@ export function useEditorShortcuts(enabled: boolean): void {
         case 'Delete':
         case 'Backspace':
           e.preventDefault();
-          toggleSelectedSegment();
+          // 클립을 체크해 뒀으면 그것부터 — 목록이 주 편집 화면이라 사용자가 기대하는 대상이다
+          if (!deleteSelectedClips()) toggleSelectedSegment();
           return;
         default:
           if (PANEL_KEYS[e.code]) useUiStore.getState().setPanel(PANEL_KEYS[e.code]);

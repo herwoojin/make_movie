@@ -42,6 +42,8 @@ test('수동 컷: S로 나누기 → Delete로 삭제 → 경계 1프레임 조�
   await importVideo(page, FIXTURES.silence);
   await expect.poll(() => outputSeconds(page)).toBe(5);
 
+  // v2에서 타임라인은 접혀 있다 — 수동 컷을 하려면 먼저 편다
+  await page.getByRole('switch', { name: '타임라인 보기' }).click();
   const row = page.locator('[data-row="video"]');
   const width = (await row.boundingBox())!.width;
   const pxPerSec = (width - 80) / 5; // 전체 보기: 내용 폭 = 길이 × 확대 + 여백 80px

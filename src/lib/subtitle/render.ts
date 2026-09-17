@@ -8,9 +8,9 @@ export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 export const BASE_WIDTH = 1920;
 export const LINE_HEIGHT = 1.25;
 
-export function subtitleFont(style: Pick<StyleValues, 'fontWeight' | 'fontSize' | 'fontFamily'>, videoWidth: number): string {
+export function subtitleFont(style: Pick<StyleValues, 'fontWeight' | 'fontSize' | 'fontFamily' | 'italic'>, videoWidth: number): string {
   const px = (style.fontSize * videoWidth) / BASE_WIDTH;
-  return `${style.fontWeight} ${px.toFixed(2)}px "${style.fontFamily}", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+  return `${style.italic ? 'italic ' : ''}${style.fontWeight} ${px.toFixed(2)}px "${style.fontFamily}", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -61,7 +61,7 @@ export function renderSubtitleToCanvas(
     : style.alignment === 'right' ? videoWidth - sideMargin - padX
       : videoWidth / 2;
 
-  if (style.bgOpacity > 0) {
+  if (style.bgEnabled && style.bgOpacity > 0) {
     const left = style.alignment === 'left' ? anchorX - padX
       : style.alignment === 'right' ? anchorX + padX - blockW
         : anchorX - blockW / 2;
@@ -79,7 +79,7 @@ export function renderSubtitleToCanvas(
       ctx.shadowBlur = style.shadowBlur * scale;
       ctx.shadowOffsetY = 2 * scale;
     }
-    if (style.outlineWidth > 0) {
+    if (style.outlineEnabled && style.outlineWidth > 0) {
       ctx.strokeStyle = style.outlineColor;
       // 선은 글자 윤곽 중앙에 그려지므로 2배 두께로 그리고 위에 채우기를 덮는다
       ctx.lineWidth = style.outlineWidth * 2 * scale;
