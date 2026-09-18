@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ServerBattery } from '@/components/layout/ServerBattery';
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister';
+import { SidecarBoot } from '@/components/layout/SidecarBoot';
 import { StatusBar } from '@/components/layout/StatusBar';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { Toaster } from '@/components/layout/Toaster';
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Toaster />
         <ServerBattery />
         <ServiceWorkerRegister />
+        <SidecarBoot />
       </body>
     </html>
   );

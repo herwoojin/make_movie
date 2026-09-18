@@ -35,11 +35,26 @@ const isSilence = (v: unknown): v is SilenceParams =>
   typeof v === 'object' && v !== null && ['thresholdDb', 'minSilenceMs', 'paddingMs', 'minKeepMs'].every((k) => typeof (v as Record<string, unknown>)[k] === 'number');
 
 export type EncoderPreference = 'auto' | 'webcodecs' | 'ffmpeg-wasm';
+export type TranslateEnginePreference = 'gemini' | 'deepl' | 'local-llm';
 export type SttEnginePreference = 'local-whisper' | 'groq';
 
 export const settings = {
   getGroqKey: () => read('byok.groq', '', isString),
   setGroqKey: (key: string) => write('byok.groq', key.trim() || null),
+  getGeminiKey: () => read('byok.gemini', '', isString),
+  setGeminiKey: (key: string) => write('byok.gemini', key.trim() || null),
+  getDeeplKey: () => read('byok.deepl', '', isString),
+  setDeeplKey: (key: string) => write('byok.deepl', key.trim() || null),
+  getTranslateEngine: () => read<TranslateEnginePreference>('translate.engine', 'gemini',
+    (v): v is TranslateEnginePreference => v === 'gemini' || v === 'deepl' || v === 'local-llm'),
+  setTranslateEngine: (v: TranslateEnginePreference) => write('translate.engine', v),
+  getGlossaryText: () => read('translate.glossary', '', isString),
+  setGlossaryText: (v: string) => write('translate.glossary', v || null),
+  /** 내 컴퓨터 도우미(사이드카) 토큰 — 이 브라우저 밖으로 나가지 않는다 */
+  getSidecarToken: () => read('sidecar.token', '', isString),
+  setSidecarToken: (v: string) => write('sidecar.token', v.trim() || null),
+  getSidecarFolder: () => read('sidecar.folder', '', isString),
+  setSidecarFolder: (v: string) => write('sidecar.folder', v || null),
   getSttEngine: () => read<SttEnginePreference>('stt.engine', 'local-whisper', (v): v is SttEnginePreference => v === 'local-whisper' || v === 'groq'),
   setSttEngine: (v: SttEnginePreference) => write('stt.engine', v),
   getFillers: () => read('fillers', DEFAULT_FILLERS, isFillers),

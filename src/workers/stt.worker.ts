@@ -7,7 +7,7 @@ import { serve } from '@/lib/worker/serve';
 
 export type SttWorkerApi = {
   transcribe: {
-    payload: { engine: 'local-whisper' | 'groq'; pcmPath?: string; pcm?: ArrayBuffer; language: string; apiKey?: string };
+    payload: { engine: 'local-whisper' | 'groq'; pcmPath?: string; pcm?: ArrayBuffer; language: string; apiKey?: string; model?: string };
     result: SttResult;
   };
 };
@@ -19,7 +19,7 @@ async function adapterFor(engine: 'local-whisper' | 'groq', apiKey?: string): Pr
 }
 
 serve<SttWorkerApi>({
-  async transcribe({ engine, pcmPath, pcm: buffer, language, apiKey }, { signal, progress }) {
+  async transcribe({ engine, pcmPath, pcm: buffer, language, apiKey, model }, { signal, progress }) {
     const adapter = await adapterFor(engine, apiKey);
     if (!(await adapter.isAvailable())) {
       throw new AppError('API_KEY_INVALID', `${adapter.displayName}을(를) 쓸 수 없습니다.`, '설정 > API 키를 확인하거나 브라우저 내장 엔진을 선택해 주세요.');
@@ -32,6 +32,7 @@ serve<SttWorkerApi>({
     const lang = engine === 'local-whisper' ? (language === 'ko' ? 'korean' : language) : language;
     const result = await adapter.transcribe(pcm, {
       language: lang,
+      model,
       signal,
       onDownload: (loaded, total) => progress({ phase: 'download', done: loaded, total, message: '음성 인식 파일 내려받는 중' }),
       onProgress: (ratio) => progress({ phase: 'transcribe', done: Math.round(ratio * 1000), total: 1000 }),

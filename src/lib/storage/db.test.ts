@@ -17,11 +17,11 @@ afterEach(async () => {
 });
 
 describe('EditOnDB', () => {
-  it('스키마 생성 + 테이블 19개', async () => {
+  it('스키마 생성 + 테이블 20개', async () => {
     db = new EditOnDB(`t-${Math.random()}`);
     await db.open();
-    expect(db.tables.map((t) => t.name).sort()).toContain('editClips');
-    expect(db.tables).toHaveLength(19);
+    expect(db.tables.map((t) => t.name).sort()).toEqual(expect.arrayContaining(['editClips', 'savedResults', 'fsHandles']));
+    expect(db.tables).toHaveLength(20);
   });
 
   it('생성/조회(인덱스)/삭제', async () => {

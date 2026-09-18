@@ -6,6 +6,15 @@ import type { SttAdapter, SttResult, SttWord } from './types';
 
 // 단어 단위 타임스탬프에는 cross-attention 정렬 헤드가 포함된 _timestamped 변환본이 필요하다
 export const WHISPER_MODEL = 'onnx-community/whisper-base_timestamped';
+
+export type WhisperSize = 'tiny' | 'base' | 'small';
+
+/** 크기가 커질수록 정확하지만 내려받는 양과 시간이 늘어난다 (F-07-3) */
+export const WHISPER_MODELS: Record<WhisperSize, { repo: string; label: string; downloadMb: number; note: string }> = {
+  tiny: { repo: 'onnx-community/whisper-tiny_timestamped', label: 'Whisper tiny', downloadMb: 45, note: '가장 빠름 · 정확도 낮음' },
+  base: { repo: WHISPER_MODEL, label: 'Whisper base (권장)', downloadMb: 85, note: '속도와 정확도의 균형' },
+  small: { repo: 'onnx-community/whisper-small_timestamped', label: 'Whisper small', downloadMb: 250, note: '가장 정확 · 오래 걸림' },
+};
 export const CHUNK_SECONDS = 30;
 export const TRANSFORMERS_BASE = '/vendor/transformers/';
 const SAMPLE_RATE = 16_000;
@@ -24,7 +33,7 @@ interface TransformersModule {
   };
 }
 
-let loading: Promise<AsrPipeline> | null = null;
+const loaded = new Map<string, Promise<AsrPipeline>>();
 let downloadListener: ((loaded: number, total: number) => void) | undefined;
 
 async function hasWebGpu(): Promise<boolean> {
@@ -46,8 +55,9 @@ async function importTransformers(): Promise<TransformersModule> {
   return mod;
 }
 
-function loadPipeline(): Promise<AsrPipeline> {
-  if (loading) return loading;
+function loadPipeline(model: string): Promise<AsrPipeline> {
+  const cached = loaded.get(model);
+  if (cached) return cached;
   const files = new Map<string, { loaded: number; total: number }>();
   const onProgress = (info: ProgressInfo) => {
     if (info.status !== 'progress' || !info.file) return;
@@ -57,22 +67,23 @@ function loadPipeline(): Promise<AsrPipeline> {
     for (const f of files.values()) { loaded += f.loaded; total += f.total; }
     downloadListener?.(loaded, total);
   };
-  loading = (async () => {
+  const task = (async () => {
     try {
       const { pipeline } = await importTransformers();
       const webgpu = await hasWebGpu();
-      return await pipeline('automatic-speech-recognition', WHISPER_MODEL, {
+      return await pipeline('automatic-speech-recognition', model, {
         device: webgpu ? 'webgpu' : 'wasm',
         // WebGPU에서는 인코더 fp32 + 디코더 q4가 속도·정확도 균형이 가장 좋다
         dtype: webgpu ? { encoder_model: 'fp32', decoder_model_merged: 'q4' } : 'q8',
         progress_callback: onProgress,
       });
     } catch (e) {
-      loading = null;
+      loaded.delete(model);
       throw new AppError('STT_MODEL_LOAD_FAILED', `음성 인식 모델을 불러오지 못했습니다. (${e instanceof Error ? e.message : String(e)})`);
     }
   })();
-  return loading;
+  loaded.set(model, task);
+  return task;
 }
 
 function toMs(sec: number | null | undefined, offsetMs: number): number {
@@ -87,9 +98,9 @@ export const localWhisperAdapter: SttAdapter = {
   async isAvailable() {
     return typeof WebAssembly !== 'undefined';
   },
-  async transcribe(pcm, { language = 'korean', onProgress, onDownload, signal }): Promise<SttResult> {
+  async transcribe(pcm, { language = 'korean', model, onProgress, onDownload, signal }): Promise<SttResult> {
     downloadListener = onDownload;
-    const asr = await loadPipeline();
+    const asr = await loadPipeline(model || WHISPER_MODEL);
     throwIfAborted(signal);
     const chunkSize = CHUNK_SECONDS * SAMPLE_RATE;
     const chunks = Math.max(1, Math.ceil(pcm.length / chunkSize));

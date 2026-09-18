@@ -39,7 +39,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: '해외 영상 번역',
-    items: [{ href: '/translate', label: '해외 영상 한국어 자막', icon: Languages, planned: true }],
+    items: [{ href: '/translate', label: '해외 영상 한국어 자막', icon: Languages }],
   },
   {
     title: 'AI 음성 도구',

@@ -22,6 +22,8 @@ export async function transcribeProject(args: {
   source: Blob;
   engine: SttEnginePreference;
   language: string;
+  /** 브라우저 내장 Whisper 모델 (크기 선택). 없으면 기본(base) */
+  model?: string;
   onProgress: (p: Progress) => void;
   signal: AbortSignal;
 }): Promise<SttResult> {
@@ -31,5 +33,5 @@ export async function transcribeProject(args: {
   }
   args.onProgress({ phase: 'analyze', done: 0, total: 1, message: '오디오 준비 중' });
   const pcmPath = await ensurePcm(args.project, args.asset, args.source, args.signal);
-  return sttWorker().call('transcribe', { engine: args.engine, pcmPath, language: args.language, apiKey }, { onProgress: args.onProgress, signal: args.signal });
+  return sttWorker().call('transcribe', { engine: args.engine, pcmPath, language: args.language, apiKey, model: args.model }, { onProgress: args.onProgress, signal: args.signal });
 }

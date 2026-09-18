@@ -5,6 +5,7 @@ export type AppErrorCode =
   | 'FILE_TOO_LARGE' | 'UNSUPPORTED_CODEC' | 'UNSUPPORTED_FORMAT' | 'QUOTA_EXCEEDED'
   | 'DECODE_FAILED' | 'ENCODE_FAILED' | 'OOM' | 'NO_AUDIO_TRACK'
   | 'STT_MODEL_LOAD_FAILED' | 'STT_API_ERROR' | 'API_KEY_INVALID'
+  | 'TRANSLATE_FAILED' | 'NETWORK_FAILED'
   | 'VISION_LOAD_FAILED' | 'NOT_FOUND' | 'STORAGE_FAILED'
   | 'AUTH_REQUIRED' | 'AUTH_FAILED' | 'SYNC_FAILED'
   | 'ABORTED' | 'UNKNOWN';
@@ -29,6 +30,8 @@ const DEFAULTS: Record<AppErrorCode, Omit<AppErrorShape, 'code'>> = {
   STT_MODEL_LOAD_FAILED: { message: '음성 인식 모델을 불러오지 못했습니다.', hint: '인터넷 연결을 확인하고 다시 시도하거나, 설정에서 Groq API 키를 넣어 보세요.' },
   STT_API_ERROR: { message: '음성 인식 서비스가 응답하지 않았습니다.', hint: '잠시 후 다시 시도하거나 브라우저 내장 엔진으로 바꿔 보세요.' },
   API_KEY_INVALID: { message: 'API 키가 올바르지 않습니다.', hint: '설정에서 키를 다시 확인해 주세요.' },
+  TRANSLATE_FAILED: { message: '번역하지 못했습니다.', hint: '번역 엔진을 바꾸거나 잠시 후 다시 시도해 주세요.' },
+  NETWORK_FAILED: { message: '인터넷 연결이 필요한 작업에 실패했습니다.', hint: '연결을 확인한 뒤 다시 시도해 주세요.' },
   VISION_LOAD_FAILED: { message: '얼굴 검출 엔진을 불러오지 못했습니다.', hint: '새로고침 후 다시 시도해 주세요. 계속되면 수동 사각형으로 가려 주세요.' },
   NOT_FOUND: { message: '대상을 찾을 수 없습니다.', hint: '프로젝트 목록에서 다시 열어 주세요.' },
   STORAGE_FAILED: { message: '파일을 저장하지 못했습니다.', hint: '시크릿 모드가 아닌지 확인하고, 설정 > 저장공간 정리에서 공간을 비워 보세요.' },

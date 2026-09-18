@@ -12,6 +12,8 @@ export interface SttResult {
 
 export interface SttTranscribeOptions {
   language?: string;
+  /** 브라우저 내장 Whisper 모델 저장소 이름 (크기 선택) */
+  model?: string;
   /** 0~1 전사 진행률 */
   onProgress?: (p: number) => void;
   /** 모델 다운로드 진행 (바이트) — 사용자가 150MB를 받는 중이라는 걸 알아야 한다 */
