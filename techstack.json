@@ -1,99 +1,333 @@
 {
   "project": "편집ON (EditON)",
-  "description": "브라우저에서 100% 클라이언트 사이드로 동작하는 무료 영상 편집 웹앱 — 무음·추임새 자동 컷, 자막 자동 생성·편집·스타일, 얼굴 자동 추적 모자이크, 변환 도구함",
-  "lastUpdated": "2026-09-15",
-  "architectureSummary": "Next.js 14 UI + 워커 5종(오디오·STT·비전·인코딩·저장) + OPFS/IndexedDB 저장. 서버는 COOP/COEP 헤더·정적 파일·헬스 체크만 담당하고 영상은 절대 업로드하지 않음",
+  "description": "브라우저에서 100% 클라이언트 사이드로 동작하는 무료 영상 편집 웹앱 — v2: 단어 칩 단위 편집, 1·2단계 파이프라인, 화면 비율·배속, 해외 영상 한국어 자막, 더빙·용량 줄이기, 선택 설치형 로컬 도우미",
+  "lastUpdated": "2026-09-18",
+  "architectureSummary": "Next.js 14 UI + 워커 5종(오디오·STT·비전·인코딩·저장) + OPFS/IndexedDB(v3) 저장. 서버는 COOP/COEP 헤더·정적 파일·헬스 체크만 담당하고 영상은 절대 업로드하지 않음. 선택 사항으로 127.0.0.1:47600 로컬 도우미(packages/helper)가 유튜브 받기·네이티브 ffmpeg·로컬 번역/TTS·폴더 저장을 담당",
   "repo": "local: /Users/heoujin/make_movie",
   "categories": [
     {
       "name": "프론트엔드",
       "items": [
-        { "name": "Next.js (App Router)", "version": "14.2", "purpose": "라우팅·페이지 렌더링, COOP/COEP 헤더 설정을 위해 서버 모드로 실행", "config": "next.config.js" },
-        { "name": "React", "version": "18.3", "purpose": "UI 컴포넌트" },
-        { "name": "TypeScript", "version": "5 (strict)", "purpose": "타입 안정성", "config": "tsconfig.json" },
-        { "name": "Tailwind CSS", "version": "3.4", "purpose": "스타일, 다크 테마 토큰", "config": "tailwind.config.ts, src/app/globals.css" },
-        { "name": "shadcn/ui 스타일 컴포넌트 + Radix UI", "version": "Radix 1.x", "purpose": "접근성 있는 슬라이더·탭·대화상자·스위치·진행률", "config": "src/components/ui/*" },
-        { "name": "lucide-react", "version": "1.x", "purpose": "아이콘" },
-        { "name": "Pretendard (self-host)", "version": "variable woff2/ttf", "purpose": "UI·자막 글꼴. CDN은 COEP에 막히므로 public/fonts로 복사" }
+        {
+          "name": "Next.js (App Router)",
+          "version": "14.2",
+          "purpose": "라우팅·페이지 렌더링, COOP/COEP 헤더 설정을 위해 서버 모드로 실행",
+          "config": "next.config.js"
+        },
+        {
+          "name": "React",
+          "version": "18.3",
+          "purpose": "UI 컴포넌트"
+        },
+        {
+          "name": "TypeScript",
+          "version": "5 (strict)",
+          "purpose": "타입 안정성",
+          "config": "tsconfig.json"
+        },
+        {
+          "name": "Tailwind CSS",
+          "version": "3.4",
+          "purpose": "스타일, 다크 테마 토큰",
+          "config": "tailwind.config.ts, src/app/globals.css"
+        },
+        {
+          "name": "shadcn/ui 스타일 컴포넌트 + Radix UI",
+          "version": "Radix 1.x",
+          "purpose": "접근성 있는 슬라이더·탭·대화상자·스위치·진행률",
+          "config": "src/components/ui/*"
+        },
+        {
+          "name": "lucide-react",
+          "version": "1.x",
+          "purpose": "아이콘"
+        },
+        {
+          "name": "Pretendard (self-host)",
+          "version": "variable woff2/ttf",
+          "purpose": "UI·자막 글꼴. CDN은 COEP에 막히므로 public/fonts로 복사"
+        },
+        {
+          "name": "@tanstack/react-virtual",
+          "version": "3.14",
+          "purpose": "v2 클립 목록 가상 스크롤 (클립 3,000개에서도 60fps)",
+          "config": "src/components/editor/ClipList/ClipList.tsx"
+        }
       ]
     },
     {
       "name": "상태·데이터",
       "items": [
-        { "name": "Zustand", "version": "4.5", "purpose": "프로젝트·타임라인·UI 스토어", "config": "src/store/*" },
-        { "name": "immer", "version": "11", "purpose": "불변 업데이트 + 되돌리기용 패치(20단계)", "config": "src/lib/core/undo.ts" },
-        { "name": "Dexie", "version": "4.4", "purpose": "IndexedDB 래퍼 — 프로젝트 메타·EDL·자막·모자이크 트랙·파형·프리셋", "config": "src/lib/storage/db.ts" },
-        { "name": "OPFS (브라우저 전용 파일 시스템)", "purpose": "원본 영상 사본·PCM 캐시·썸네일·내보내기 결과", "config": "src/lib/storage/opfs.ts, src/workers/storage.worker.ts" },
-        { "name": "nanoid", "version": "6", "purpose": "레코드 id" },
-        { "name": "Cloud Firestore", "version": "firebase 12.19", "purpose": "선택 동기화: 자막 스타일 프리셋·추임새 사전·프로젝트 이름/길이 기록 (영상·오디오·자막 내용 없음). 버튼을 누를 때만 동기화", "config": "src/lib/firebase/sync.ts, src/lib/firebase/schema.ts" }
+        {
+          "name": "Zustand",
+          "version": "4.5",
+          "purpose": "프로젝트·타임라인·UI 스토어",
+          "config": "src/store/*"
+        },
+        {
+          "name": "immer",
+          "version": "11",
+          "purpose": "불변 업데이트 + 되돌리기용 패치(20단계)",
+          "config": "src/lib/core/undo.ts"
+        },
+        {
+          "name": "OPFS (브라우저 전용 파일 시스템)",
+          "purpose": "원본 영상 사본·PCM 캐시·썸네일·내보내기 결과",
+          "config": "src/lib/storage/opfs.ts, src/workers/storage.worker.ts"
+        },
+        {
+          "name": "nanoid",
+          "version": "6",
+          "purpose": "레코드 id"
+        },
+        {
+          "name": "Cloud Firestore",
+          "version": "firebase 12.19",
+          "purpose": "선택 동기화: 자막 스타일 프리셋·추임새 사전·프로젝트 이름/길이 기록 (영상·오디오·자막 내용 없음). 버튼을 누를 때만 동기화",
+          "config": "src/lib/firebase/sync.ts, src/lib/firebase/schema.ts"
+        },
+        {
+          "name": "Dexie",
+          "version": "4.4",
+          "purpose": "IndexedDB 스키마 v3 — 프로젝트·EDL·편집 클립(EditClip)·단어·모자이크·파형·프리셋·최근 저장 결과·음성 프로필·저장 폴더 권한",
+          "config": "src/lib/storage/db.ts"
+        }
       ]
     },
     {
       "name": "미디어 처리 (브라우저 내)",
       "items": [
-        { "name": "WebCodecs API", "purpose": "1순위 인코더 — 하드웨어 디코드·재인코딩", "config": "src/lib/encode/webcodecs/render.ts" },
-        { "name": "mp4box.js", "version": "2.4", "purpose": "MP4 디먹스(샘플 추출·메타 추출)", "config": "src/lib/encode/webcodecs/demux.ts" },
-        { "name": "mp4-muxer", "version": "5.2", "purpose": "MP4 먹싱, OPFS로 스트리밍 쓰기", "config": "src/lib/encode/webcodecs/render.ts" },
-        { "name": "@ffmpeg/ffmpeg + core-mt / core", "version": "0.12", "purpose": "폴백 인코더(select 필터 컷, ASS 번인, MP3·GIF). wasm·워커는 public/ffmpeg*에 self-host. core-mt 교착 방지를 위해 디코드 2·인코드 4 스레드 상한, 25초 무응답 시 단일 스레드 코어로 자동 재시도", "config": "src/lib/encode/ffmpeg/*" },
-        { "name": "Web Audio (OfflineAudioContext)", "purpose": "오디오 디코드 → 모노 16kHz PCM", "config": "src/lib/audio/decode.ts" },
-        { "name": "자체 GIF 인코더", "purpose": "median-cut 팔레트 + LZW. GIF 때문에 ffmpeg를 받지 않게", "config": "src/lib/gif/encoder.ts" },
-        { "name": "자체 ZIP 작성기", "purpose": "사진 일괄 모자이크 결과 묶음 다운로드", "config": "src/lib/zip.ts" }
+        {
+          "name": "WebCodecs API",
+          "purpose": "1순위 인코더 — 하드웨어 디코드·재인코딩",
+          "config": "src/lib/encode/webcodecs/render.ts"
+        },
+        {
+          "name": "mp4box.js",
+          "version": "2.4",
+          "purpose": "MP4 디먹스(샘플 추출·메타 추출)",
+          "config": "src/lib/encode/webcodecs/demux.ts"
+        },
+        {
+          "name": "mp4-muxer",
+          "version": "5.2",
+          "purpose": "MP4 먹싱, OPFS로 스트리밍 쓰기",
+          "config": "src/lib/encode/webcodecs/render.ts"
+        },
+        {
+          "name": "@ffmpeg/ffmpeg + core-mt / core",
+          "version": "0.12",
+          "purpose": "폴백 인코더(select 필터 컷, ASS 번인, MP3·GIF). wasm·워커는 public/ffmpeg*에 self-host. core-mt 교착 방지를 위해 디코드 2·인코드 4 스레드 상한, 25초 무응답 시 단일 스레드 코어로 자동 재시도",
+          "config": "src/lib/encode/ffmpeg/*"
+        },
+        {
+          "name": "Web Audio (OfflineAudioContext)",
+          "purpose": "오디오 디코드 → 모노 16kHz PCM",
+          "config": "src/lib/audio/decode.ts"
+        },
+        {
+          "name": "자체 GIF 인코더",
+          "purpose": "median-cut 팔레트 + LZW. GIF 때문에 ffmpeg를 받지 않게",
+          "config": "src/lib/gif/encoder.ts"
+        },
+        {
+          "name": "자체 ZIP 작성기",
+          "purpose": "사진 일괄 모자이크 결과 묶음 다운로드",
+          "config": "src/lib/zip.ts"
+        }
       ]
     },
     {
       "name": "AI·외부 API",
       "items": [
-        { "name": "@huggingface/transformers (Whisper base timestamped)", "version": "3.8", "purpose": "브라우저 내장 음성 인식 + 단어 타임스탬프 (WebGPU 우선, wasm 폴백). 번들러로 묶지 않고 transformers.min.js·ORT wasm을 public/vendor/transformers에 self-host 후 런타임 import. 모델은 HuggingFace에서 최초 1회 다운로드", "config": "src/lib/stt/localWhisper.ts" },
-        { "name": "Groq Whisper large-v3-turbo (BYOK)", "purpose": "선택: 사용자 자신의 키로 빠른 음성 인식. 사용 직전 오디오 전송 고지", "config": "src/lib/stt/groq.ts" },
-        { "name": "@mediapipe/tasks-vision FaceDetector (BlazeFace short range)", "version": "1.0", "purpose": "얼굴 검출. wasm·tflite는 public/mediapipe에 self-host", "config": "src/lib/vision/faceDetect.ts" }
+        {
+          "name": "@huggingface/transformers (Whisper base timestamped)",
+          "version": "3.8",
+          "purpose": "브라우저 내장 음성 인식 + 단어 타임스탬프 (WebGPU 우선, wasm 폴백). 번들러로 묶지 않고 transformers.min.js·ORT wasm을 public/vendor/transformers에 self-host 후 런타임 import. 모델은 HuggingFace에서 최초 1회 다운로드",
+          "config": "src/lib/stt/localWhisper.ts"
+        },
+        {
+          "name": "Groq Whisper large-v3-turbo (BYOK)",
+          "purpose": "선택: 사용자 자신의 키로 빠른 음성 인식. 사용 직전 오디오 전송 고지",
+          "config": "src/lib/stt/groq.ts"
+        },
+        {
+          "name": "@mediapipe/tasks-vision FaceDetector (BlazeFace short range)",
+          "version": "1.0",
+          "purpose": "얼굴 검출. wasm·tflite는 public/mediapipe에 self-host",
+          "config": "src/lib/vision/faceDetect.ts"
+        },
+        {
+          "name": "Google Gemini (BYOK)",
+          "version": "v1beta generateContent",
+          "purpose": "v2 해외 영상 자막 번역 기본 엔진. 자막 글자만 전송, 키는 localStorage",
+          "config": "src/lib/translate/gemini.ts"
+        },
+        {
+          "name": "DeepL (BYOK)",
+          "version": "v2 translate",
+          "purpose": "v2 번역 대체 엔진. 브라우저 직접 호출이 막히면 도우미 경유 안내",
+          "config": "src/lib/translate/deepl.ts"
+        },
+        {
+          "name": "Ollama (로컬)",
+          "version": "qwen3:4b 기본",
+          "purpose": "v2 내 컴퓨터 번역 — 도우미가 호출, 인터넷 전송 없음",
+          "config": "packages/helper/src/server.js"
+        }
       ]
     },
     {
       "name": "인증·접근제어",
       "items": [
-        { "name": "Firebase Authentication (Google 로그인)", "version": "firebase 12.19", "purpose": "선택 기능 — 동기화용 로그인. /login 페이지(격리 헤더 없음)에서 팝업으로 로그인, 환경변수 없으면 비활성", "config": "src/lib/firebase/auth.ts, src/app/login" },
-        { "name": "Firestore 보안 규칙", "purpose": "users/{uid} 아래 본인만 읽기·쓰기, 허용 필드·타입·길이 검사. Storage는 전부 거부", "config": "firestore.rules, storage.rules, docs/ERD.md 5장" }
+        {
+          "name": "Firebase Authentication (Google 로그인)",
+          "version": "firebase 12.19",
+          "purpose": "선택 기능 — 동기화용 로그인. /login 페이지(격리 헤더 없음)에서 팝업으로 로그인, 환경변수 없으면 비활성",
+          "config": "src/lib/firebase/auth.ts, src/app/login"
+        },
+        {
+          "name": "Firestore 보안 규칙",
+          "purpose": "users/{uid} 아래 본인만 읽기·쓰기, 허용 필드·타입·길이 검사. Storage는 전부 거부",
+          "config": "firestore.rules, storage.rules, docs/ERD.md 5장"
+        }
       ]
     },
     {
       "name": "CORS·격리 헤더",
       "items": [
-        { "name": "COOP same-origin / COEP credentialless / CORP cross-origin", "purpose": "SharedArrayBuffer(ffmpeg 멀티스레드) 사용 가능하게. HuggingFace 모델·Firebase API는 credentialless로 허용. /login 만 제외(Firebase 팝업 로그인)", "config": "next.config.js (페이지), netlify.toml (CDN 정적 파일)" }
+        {
+          "name": "COOP same-origin / COEP credentialless / CORP cross-origin",
+          "purpose": "SharedArrayBuffer(ffmpeg 멀티스레드) 사용 가능하게. HuggingFace 모델·Firebase API는 credentialless로 허용. /login 만 제외(Firebase 팝업 로그인)",
+          "config": "next.config.js (페이지), netlify.toml (CDN 정적 파일)"
+        }
       ]
     },
     {
       "name": "호스팅·배포",
       "items": [
-        { "name": "GitHub", "purpose": "코드 저장소. main push → CI + Netlify 자동 배포", "config": ".github/workflows/ci.yml" },
-        { "name": "Netlify (Next.js 런타임)", "purpose": "페이지·정적 파일·헬스 API 호스팅. 영상 처리 서버 비용 0원", "config": "netlify.toml, .nvmrc (Node 22)" },
-        { "name": "GitHub Actions CI", "purpose": "타입·린트·단위 테스트(커버리지)·빌드, E2E 수동 실행", "config": ".github/workflows/ci.yml" },
-        { "name": "scripts/check-deploy.mjs", "purpose": "배포 후 격리 헤더(1회·/login 제외)·wasm·모델 응답 점검" },
-        { "name": "PWA (manifest + service worker)", "purpose": "오프라인 셸, wasm 캐시", "config": "public/manifest.webmanifest, public/sw.js" }
+        {
+          "name": "GitHub",
+          "purpose": "코드 저장소. main push → CI + Netlify 자동 배포",
+          "config": ".github/workflows/ci.yml"
+        },
+        {
+          "name": "Netlify (Next.js 런타임)",
+          "purpose": "페이지·정적 파일·헬스 API 호스팅. 영상 처리 서버 비용 0원",
+          "config": "netlify.toml, .nvmrc (Node 22)"
+        },
+        {
+          "name": "GitHub Actions CI",
+          "purpose": "타입·린트·단위 테스트(커버리지)·빌드, E2E 수동 실행",
+          "config": ".github/workflows/ci.yml"
+        },
+        {
+          "name": "scripts/check-deploy.mjs",
+          "purpose": "배포 후 격리 헤더(1회·/login 제외)·wasm·모델 응답 점검"
+        },
+        {
+          "name": "PWA (manifest + service worker)",
+          "purpose": "오프라인 셸, wasm 캐시",
+          "config": "public/manifest.webmanifest, public/sw.js"
+        }
       ]
     },
     {
       "name": "운영 가시성(Observability)",
       "items": [
-        { "name": "/api/server-health", "purpose": "서버 프로세스 메모리(RSS/메모리 한도)·임시 디스크·CPU·가동시간 + level(ok/warn/danger/critical)", "config": "src/app/api/server-health/route.ts" },
-        { "name": "배터리 신호등 (우측 하단)", "purpose": "서버 용량 + 브라우저 저장공간·탭 메모리를 합산해 표시, 30초 폴링, 3회 실패 시 offline", "config": "src/components/layout/ServerBattery.tsx" }
+        {
+          "name": "/api/server-health",
+          "purpose": "서버 프로세스 메모리(RSS/메모리 한도)·임시 디스크·CPU·가동시간 + level(ok/warn/danger/critical)",
+          "config": "src/app/api/server-health/route.ts"
+        },
+        {
+          "name": "배터리 신호등 (우측 하단)",
+          "purpose": "서버 용량 + 브라우저 저장공간·탭 메모리를 합산해 표시, 30초 폴링, 3회 실패 시 offline",
+          "config": "src/components/layout/ServerBattery.tsx"
+        }
       ]
     },
     {
       "name": "테스트·빌드",
       "items": [
-        { "name": "Vitest + happy-dom + fake-indexeddb", "version": "5.0", "purpose": "순수 로직(EDL·무음·자막·자막 렌더·트래커·오디오 이어붙이기·GIF·ZIP) + Dexie 스키마 테스트, 커버리지 기준 90%", "config": "vitest.config.ts" },
-        { "name": "Playwright (설치된 Google Chrome 채널)", "purpose": "E2E: 진단·임포트·자동컷·수동컷·되돌리기·WebCodecs/ffmpeg 내보내기(ffprobe로 결과 검증)·얼굴 찾기·도구함·프로젝트 파일. 번들 Chromium엔 H.264/AAC가 없어 Chrome 사용", "config": "playwright.config.ts, tests/e2e" },
-        { "name": "ffprobe (로컬 CLI, 개발용)", "purpose": "E2E에서 내보낸 파일의 코덱·해상도·길이·A/V 싱크 검증" },
-        { "name": "scripts/copy-assets.mjs", "purpose": "postinstall에서 ffmpeg·MediaPipe wasm, 모델, 폰트를 public/으로 self-host 복사" }
+        {
+          "name": "Vitest + happy-dom + fake-indexeddb",
+          "version": "5.0",
+          "purpose": "순수 로직(EDL·무음·자막·자막 렌더·트래커·오디오 이어붙이기·GIF·ZIP) + Dexie 스키마 테스트, 커버리지 기준 90%",
+          "config": "vitest.config.ts"
+        },
+        {
+          "name": "Playwright (설치된 Google Chrome 채널)",
+          "purpose": "E2E: 진단·임포트·자동컷·수동컷·되돌리기·WebCodecs/ffmpeg 내보내기(ffprobe로 결과 검증)·얼굴 찾기·도구함·프로젝트 파일. 번들 Chromium엔 H.264/AAC가 없어 Chrome 사용",
+          "config": "playwright.config.ts, tests/e2e"
+        },
+        {
+          "name": "ffprobe (로컬 CLI, 개발용)",
+          "purpose": "E2E에서 내보낸 파일의 코덱·해상도·길이·A/V 싱크 검증"
+        },
+        {
+          "name": "scripts/copy-assets.mjs",
+          "purpose": "postinstall에서 ffmpeg·MediaPipe wasm, 모델, 폰트를 public/으로 self-host 복사"
+        }
       ]
     },
     {
       "name": "산출물",
       "items": [
-        { "name": "MP4 (H.264 + AAC/Opus)", "purpose": "유튜브 1080p/720p, 쇼츠 세로 1080×1920" },
-        { "name": "GIF / WAV / MP3", "purpose": "GIF 움짤, 오디오만 내보내기, 도구함 오디오 추출" },
-        { "name": "SRT / VTT / ASS", "purpose": "자막 파일 내보내기·불러오기, ffmpeg 번인" },
-        { "name": ".editon.json", "purpose": "편집 결정만 담은 프로젝트 파일 (영상 미포함)" }
+        {
+          "name": "MP4 (H.264 + AAC/Opus)",
+          "purpose": "유튜브 1080p/720p, 쇼츠 세로 1080×1920"
+        },
+        {
+          "name": "GIF / WAV / MP3",
+          "purpose": "GIF 움짤, 오디오만 내보내기, 도구함 오디오 추출"
+        },
+        {
+          "name": "SRT / VTT / ASS",
+          "purpose": "자막 파일 내보내기·불러오기, ffmpeg 번인"
+        },
+        {
+          "name": ".editon.json",
+          "purpose": "편집 결정만 담은 프로젝트 파일 (영상 미포함)"
+        }
+      ]
+    },
+    {
+      "name": "시스템 의존성",
+      "items": [
+        {
+          "name": "yt-dlp / ffmpeg (네이티브)",
+          "purpose": "v2 도우미가 PATH에서 찾아 유튜브 받기·빠른 압축에 사용. 없으면 /health features가 false",
+          "config": "packages/helper/src/bin.js"
+        }
+      ]
+    },
+    {
+      "name": "로컬 도우미 (선택 설치)",
+      "items": [
+        {
+          "name": "Fastify",
+          "version": "5.1",
+          "purpose": "127.0.0.1:47600 전용 HTTP 서버 (외부 바인딩 금지)",
+          "config": "packages/helper/src/server.js"
+        },
+        {
+          "name": "@fastify/cors",
+          "version": "10",
+          "purpose": "localhost·배포 도메인만 허용",
+          "config": "packages/helper/src/server.js"
+        },
+        {
+          "name": "@fastify/multipart",
+          "version": "9",
+          "purpose": "브라우저가 만든 파일 저장·임시 업로드",
+          "config": "packages/helper/src/server.js"
+        },
+        {
+          "name": "토큰 인증",
+          "purpose": "최초 실행 시 랜덤 토큰 생성 → ~/.editon/token (0600). 토큰 없는 요청은 401",
+          "config": "packages/helper/src/token.js"
+        }
       ]
     }
   ]

@@ -55,6 +55,9 @@ export const settings = {
   setSidecarToken: (v: string) => write('sidecar.token', v.trim() || null),
   getSidecarFolder: () => read('sidecar.folder', '', isString),
   setSidecarFolder: (v: string) => write('sidecar.folder', v || null),
+  /** 유튜브 내려받기 권리 안내를 이미 봤는지 */
+  getYoutubeNoticeSeen: () => read('youtube.noticeSeen', false, isBool),
+  setYoutubeNoticeSeen: (v: boolean) => write('youtube.noticeSeen', v),
   getSttEngine: () => read<SttEnginePreference>('stt.engine', 'local-whisper', (v): v is SttEnginePreference => v === 'local-whisper' || v === 'groq'),
   setSttEngine: (v: SttEnginePreference) => write('stt.engine', v),
   getFillers: () => read('fillers', DEFAULT_FILLERS, isFillers),

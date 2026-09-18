@@ -1,0 +1,23 @@
+{
+  "name": "editon-helper",
+  "version": "1.0.0",
+  "description": "편집ON 내 컴퓨터 도우미 — 브라우저 혼자서는 못 하는 일(유튜브 받기·네이티브 ffmpeg·로컬 번역/TTS·폴더 저장)만 도와주는 로컬 서버",
+  "type": "module",
+  "bin": { "editon-helper": "./bin/editon-helper.js" },
+  "main": "./src/server.js",
+  "files": ["bin", "src", "README.md"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node bin/editon-helper.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/multipart": "^9.0.1",
+    "fastify": "^5.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.0"
+  },
+  "license": "MIT"
+}

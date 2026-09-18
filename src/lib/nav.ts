@@ -43,11 +43,11 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     title: 'AI 음성 도구',
-    items: [{ href: '/tts', label: '내 목소리 TTS', icon: Mic2, sidecar: true, planned: true }],
+    items: [{ href: '/tts', label: '내 목소리 TTS', icon: Mic2, sidecar: true }],
   },
   {
     title: '문서 도구',
-    items: [{ href: '/youtube', label: '유튜브 영상 추출', icon: Download, sidecar: true, planned: true }],
+    items: [{ href: '/tools/youtube', label: '유튜브 영상 추출', icon: Download, sidecar: true }],
   },
   {
     items: [

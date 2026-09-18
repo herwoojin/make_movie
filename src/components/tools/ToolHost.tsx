@@ -6,6 +6,7 @@ import { GifBatchTool } from './GifBatchTool';
 import { ImageEditTool } from './ImageEditTool';
 import { PhotoMosaicTool } from './PhotoMosaicTool';
 import { ScreenRecorderTool } from './ScreenRecorderTool';
+import { YoutubeTool } from './YoutubeTool';
 
 export function ToolHost({ tool }: { tool: string }) {
   switch (tool) {
@@ -15,6 +16,7 @@ export function ToolHost({ tool }: { tool: string }) {
     case 'audio': return <AudioExtractTool />;
     case 'image': return <ImageEditTool />;
     case 'photo-mosaic': return <PhotoMosaicTool />;
+    case 'youtube': return <YoutubeTool />;
     default: return null;
   }
 }

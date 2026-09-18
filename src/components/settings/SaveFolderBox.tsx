@@ -17,9 +17,12 @@ const METHOD_TEXT: Record<SaveMethod, string> = {
 export function SaveFolderBox() {
   const [method, setMethod] = useState<SaveMethod>('download');
   const [folder, setFolder] = useState<string | null>(null);
+  // 브라우저에서만 알 수 있는 값이라 서버 렌더와 어긋나지 않게 붙은 뒤에 확인한다
+  const [canPick, setCanPick] = useState(false);
 
   const refresh = useCallback(() => {
     setMethod(currentMethod());
+    setCanPick(supportsFolderPicker());
     savedFolderName().then(setFolder).catch(() => setFolder(null));
   }, []);
   useEffect(refresh, [refresh]);
@@ -42,7 +45,7 @@ export function SaveFolderBox() {
       <p className="text-sm">
         지금 저장 위치: <b>{folder ?? '다운로드 폴더'}</b>
       </p>
-      {supportsFolderPicker() ? (
+      {canPick ? (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => void pick()}><FolderOpen /> {folder ? '폴더 바꾸기' : '폴더 고르기'}</Button>
           {folder && (

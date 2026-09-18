@@ -182,6 +182,32 @@ class SidecarClient {
     return this.post('/fs/open-folder', { path: path ?? settings.getSidecarFolder() });
   }
 
+  /** 브라우저 파일을 도우미의 임시 폴더에 올린다 (ffmpeg 입력용) */
+  async uploadTemp(file: Blob, fileName: string): Promise<string> {
+    const form = new FormData();
+    form.set('file', file, fileName);
+    const res = await fetch(`${SIDECAR_ORIGIN}/fs/temp`, { method: 'POST', headers: this.headers(), body: form });
+    if (!res.ok) throw new AppError('STORAGE_FAILED', '도우미에 파일을 올리지 못했습니다.', '도우미 창의 메시지를 확인해 주세요.');
+    return ((await res.json()) as { path?: string }).path ?? '';
+  }
+
+  /** 내 컴퓨터의 진짜 ffmpeg로 돌린다 (wasm보다 훨씬 빠르다) */
+  runFfmpeg(
+    req: { args: string[]; outPath: string; durationMs?: number },
+    onProgress?: (done: number, total: number, message?: string) => void, signal?: AbortSignal,
+  ): Promise<{ outPath: string; size: number }> {
+    return this.postStream('/ffmpeg/run', req, onProgress, signal);
+  }
+
+  /** 도우미가 가진 파일을 브라우저로 가져온다 (유튜브로 받은 영상 등) */
+  async readFile(path: string): Promise<File> {
+    const res = await fetch(`${SIDECAR_ORIGIN}/fs/read?path=${encodeURIComponent(path)}`, { headers: this.headers() });
+    if (!res.ok) throw new AppError('NOT_FOUND', '도우미가 가진 파일을 가져오지 못했습니다.', '파일이 아직 그 자리에 있는지 확인해 주세요.');
+    const blob = await res.blob();
+    const name = path.split(/[/\\]/).pop() || 'video.mp4';
+    return new File([blob], name, { type: blob.type || 'video/mp4' });
+  }
+
   /** 브라우저가 만든 파일을 도우미에게 넘겨 지정한 폴더에 저장한다 */
   async saveFile(blob: Blob, fileName: string, dir?: string): Promise<string> {
     const form = new FormData();
