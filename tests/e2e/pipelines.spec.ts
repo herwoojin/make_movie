@@ -101,7 +101,42 @@ test('로컬 Whisper: 한국어 단어 타임스탬프로 자막 생성 (@networ
   const errors = collectErrors(page);
   await importVideo(page, FIXTURES.speech);
   await openPanel(page, '자막');
+  // 짧은 영상은 "방금 알아들은 말"이 잠깐만 떠서 폴링으로는 놓칠 수 있다 — 화면 변화를 모두 기록해 둔다
+  await page.evaluate(() => {
+    const w = window as unknown as { __heard: string[]; __pct: string[] };
+    w.__heard = [];
+    w.__pct = [];
+    new MutationObserver(() => {
+      document.querySelectorAll('blockquote').forEach((q) => {
+        if (q.textContent?.includes('방금 알아들은 말')) w.__heard.push(q.textContent);
+      });
+      const box = document.querySelector('[aria-label="자막 만들기 진행 상황"]');
+      const pct = box?.querySelector('h3 + span')?.textContent;
+      if (pct && w.__pct[w.__pct.length - 1] !== pct) w.__pct.push(pct);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
   await page.getByRole('button', { name: /^자막 만들기$/ }).click();
+
+  // 진행 화면: 단계 목록이 보이고, 인식 중에는 구간이 나온다
+  const progress = page.getByRole('status', { name: '자막 만들기 진행 상황' });
+  await expect(progress.getByText('음성을 글자로 바꾸기')).toBeVisible();
+  await expect(progress.getByText(/구간 \d+\/\d+/)).toBeVisible({ timeout: 540_000 });
+  // 끝나면 100%와 완료 표시
+  await expect(page.getByText('자막 만들기 완료')).toBeVisible({ timeout: 540_000 });
+  await expect(progress.getByText('100%')).toBeVisible();
+
+  const seen = await page.evaluate(() => {
+    const w = window as unknown as { __heard: string[]; __pct: string[] };
+    return { __heard: w.__heard, __pct: w.__pct };
+  });
+  console.log('화면에 흘러나온 문장:', seen.__heard.slice(-3), '진행률 변화:', seen.__pct.join(' → '));
+  // 인식 중에 실제 문장이 화면에 흘러나왔다
+  expect(seen.__heard.some((t) => /안녕/.test(t))).toBe(true);
+  // 진행률은 뒤로 가지 않고 100%로 끝난다
+  const pcts = seen.__pct.map((p) => Number(p.replace('%', '')));
+  expect(pcts[pcts.length - 1]).toBe(100);
+  expect(pcts.every((v, i) => i === 0 || v >= pcts[i - 1])).toBe(true);
+
   const outcome = page.getByText(/자막 클립 \d+개를 만들었습니다|말소리를 찾지 못했습니다/).or(errorToasts(page));
   await expect(outcome.first()).toBeVisible({ timeout: 540_000 });
   await expect(errorToasts(page)).toHaveCount(0);

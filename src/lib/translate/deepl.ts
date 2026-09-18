@@ -73,7 +73,7 @@ export const deeplAdapter: TranslateAdapter = {
         out[cueIndex].translated = applyGlossary(text || cues[cueIndex].text, opts.glossary);
       });
       done += indexes.length;
-      opts.onProgress?.(done, cues.length, '번역하는 중');
+      opts.onProgress?.(done, cues.length, '번역하는 중', out[indexes[indexes.length - 1]]?.translated);
     }
     return out;
   },

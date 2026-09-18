@@ -18,7 +18,25 @@ export interface SttTranscribeOptions {
   onProgress?: (p: number) => void;
   /** 모델 다운로드 진행 (바이트) — 사용자가 150MB를 받는 중이라는 걸 알아야 한다 */
   onDownload?: (loaded: number, total: number) => void;
+  /** 서버가 파일 크기를 알려주지 않을 때 쓰는 예상 다운로드 크기 (바이트) */
+  expectedDownloadBytes?: number;
+  /** 인식 중인 구간과 방금 알아들은 말 — "정말 돌아가고 있다"를 보여 주기 위해 */
+  onPartial?: (p: SttPartial) => void;
   signal?: AbortSignal;
+}
+
+export interface SttPartial {
+  /** 몇 번째 구간인지 (0부터) */
+  chunk: number;
+  chunks: number;
+  fromMs: number;
+  toMs: number;
+  /** 이 구간에서 지금까지 알아들은 말 */
+  text: string;
+  /** 전체 진행 비율 (0~1) — 구간 안에서도 조금씩 움직인다 */
+  ratio: number;
+  /** 이 구간 인식이 끝났을 때 한 번 (완성된 문장) — 화면 갱신 간격 조절에서 버리면 안 된다 */
+  final?: boolean;
 }
 
 export interface SttAdapter {

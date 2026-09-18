@@ -4,6 +4,9 @@ import { collectErrors, FIXTURES } from './helpers';
 // 도우미가 꺼져 있을 때의 동작 — 기본값. 에러 없이 웹 전용으로 굴러가야 한다.
 test('도우미가 없어도 아무 에러 없이 편집·도구가 열린다', async ({ page }) => {
   const errors = collectErrors(page);
+  // 토큰이 없으면 도우미 주소로 접속조차 하지 않는다 (콘솔에 연결 거부가 찍히지 않게)
+  const sidecarCalls: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('127.0.0.1:47600')) sidecarCalls.push(r.url()); });
 
   await page.goto('/settings');
   await expect(page.getByText('연결되지 않음 (웹 전용 모드)')).toBeVisible({ timeout: 20_000 });
@@ -20,6 +23,7 @@ test('도우미가 없어도 아무 에러 없이 편집·도구가 열린다', 
   await page.locator('input[type=file]').setInputFiles(FIXTURES.silence);
   await expect(page.getByText('silence-test.mp4')).toBeVisible();
 
+  expect(sidecarCalls).toEqual([]);
   expect(errors).toEqual([]);
 });
 

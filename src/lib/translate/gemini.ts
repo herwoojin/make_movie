@@ -55,6 +55,7 @@ export const geminiAdapter: TranslateAdapter = {
     const batches = chunk([...cues.keys()], BATCH);
     const totalSteps = batches.length + (opts.mode === 'precise' ? Math.ceil(cues.length / REVIEW_BATCH) : 0);
     let step = 0;
+    opts.onProgress?.(0, totalSteps, '번역 서버에 보내는 중');
 
     for (const indexes of batches) {
       throwIfAborted(opts.signal);
@@ -66,7 +67,7 @@ export const geminiAdapter: TranslateAdapter = {
         out[cueIndex].translated = applyGlossary(parsed[k]?.trim() || cues[cueIndex].text, opts.glossary);
       });
       step += 1;
-      opts.onProgress?.(step, totalSteps, '번역하는 중');
+      opts.onProgress?.(step, totalSteps, '번역하는 중', out[indexes[indexes.length - 1]]?.translated);
     }
 
     if (opts.mode === 'fast') return out;
@@ -85,7 +86,7 @@ export const geminiAdapter: TranslateAdapter = {
         });
       }
       step += 1;
-      opts.onProgress?.(step, totalSteps, '전체 문맥을 다시 보는 중');
+      opts.onProgress?.(step, totalSteps, '전체 문맥을 다시 보는 중', out[indexes[indexes.length - 1]]?.translated);
     }
     return out;
   },

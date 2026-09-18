@@ -48,7 +48,8 @@ export function SidecarBox() {
       <div className="space-y-1">
         <Label htmlFor="sidecar-token" className="text-xs">연결 토큰</Label>
         <Input id="sidecar-token" type="password" autoComplete="off" placeholder="도우미 창에 표시된 토큰" value={token}
-          onChange={(e) => { setToken(e.target.value); settings.setSidecarToken(e.target.value); }} />
+          onChange={(e) => { setToken(e.target.value); settings.setSidecarToken(e.target.value); }}
+          onBlur={() => { if (token.trim()) recheck(); }} />
         <p className="text-[11px] text-muted-foreground">
           도우미는 {SIDECAR_ORIGIN} 에서만 듣고, 토큰이 맞는 요청만 받습니다. 토큰은 이 브라우저에만 저장됩니다.
         </p>

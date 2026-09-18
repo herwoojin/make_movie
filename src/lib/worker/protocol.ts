@@ -9,6 +9,19 @@ export interface Progress {
   total: number;
   etaMs?: number;
   message?: string;
+  /** 사용자가 "정말 진행 중인지" 알 수 있게 보여 줄 세부 내용 */
+  detail?: ProgressDetail;
+}
+
+export interface ProgressDetail {
+  /** 몇 번째 구간을 처리 중인지 (1부터) */
+  chunk?: number;
+  chunks?: number;
+  /** 처리 중인 구간의 원본 시각 */
+  fromMs?: number;
+  toMs?: number;
+  /** 방금 알아들은 말 / 방금 번역한 문장 */
+  text?: string;
 }
 
 export interface WorkerRequest<T = unknown> {

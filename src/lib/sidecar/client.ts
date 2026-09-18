@@ -80,9 +80,18 @@ class SidecarClient {
     return token ? { ...extra, authorization: `Bearer ${token}` } : extra;
   }
 
-  /** 시작할 때 한 번. 실패해도 조용히 웹 전용으로 간다 */
+  /**
+   * 시작할 때 한 번. 실패해도 조용히 웹 전용으로 간다.
+   * 토큰이 없으면(도우미를 쓰지 않는 사용자) 접속 자체를 하지 않는다 — 브라우저가 연결 거부를
+   * 콘솔에 빨갛게 찍기 때문에, 쓰지도 않는 기능 때문에 오류처럼 보이는 일을 막는다.
+   */
   async check(force = false): Promise<SidecarHealth | null> {
     if (!force && this.statusValue === 'connected' && this.healthValue) return this.healthValue;
+    if (!force && this.statusValue === 'offline') return null;
+    if (!force && !settings.getSidecarToken()) {
+      this.emit('offline', null);
+      return null;
+    }
     if (this.checking) return this.checking;
     this.emit('checking', this.healthValue);
     this.checking = (async () => {

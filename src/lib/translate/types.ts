@@ -20,7 +20,8 @@ export interface TranslateOptions {
   /** 고유명사 대응표 (원어 → 한국어) */
   glossary: Record<string, string>;
   mode: TranslateMode;
-  onProgress?: (done: number, total: number, message?: string) => void;
+  /** preview: 방금 번역한 문장 (진행 화면에 보여 준다) */
+  onProgress?: (done: number, total: number, message?: string, preview?: string) => void;
   signal?: AbortSignal;
 }
 

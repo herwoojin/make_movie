@@ -2,15 +2,15 @@
 
 // 1단계 · 해외 영상 한국어 자막 (F-07).
 // 영상 → 원어 자막(Whisper) → 한국어 번역(BYOK/내 컴퓨터) → 표에서 손보기 → 2단계로 인계.
-import { ArrowRight, Download, Languages, Loader2, Play, X } from 'lucide-react';
+import { ArrowRight, Download, Languages, Play } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { TranslatedCue } from '@/lib/translate';
-import { ElapsedTimer } from '@/components/common/ElapsedTimer';
+import { StageProgress } from '@/components/common/StageProgress';
 import { ByokNoticeDialog } from '@/components/editor/panels/ByokNoticeDialog';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/ui/field';
-import { Input, Label, NativeSelect, Progress } from '@/components/ui/misc';
+import { Input, Label, NativeSelect } from '@/components/ui/misc';
 import { buildClipsFromWords, renumberClips } from '@/lib/core/clips';
 import { formatShort } from '@/lib/core/timecode';
 import { ACCEPT_VIDEO, createProjectFromFile } from '@/lib/editor/importPipeline';
@@ -23,11 +23,22 @@ import { getDb } from '@/lib/storage/db';
 import { loadProjectBundle, saveProjectDoc, saveTranscript, setPipelineStage } from '@/lib/storage/projectRepo';
 import { createHistory } from '@/lib/core/undo';
 import { MODE_LABELS, TONE_LABELS, TRANSLATE_ENGINES, parseGlossary, runTranslate, type TranslateEngineId, type TranslateMode, type TranslateTone } from '@/lib/translate';
+import { sttStage, type StageDef, type StageRun } from '@/lib/progress/stages';
 import { cn } from '@/lib/utils';
 import type { Progress as WorkerProgress } from '@/lib/worker/protocol';
 import { useUiStore } from '@/store/uiStore';
 
 const LANGS: [string, string][] = [['auto', '자동 감지'], ['en', '영어'], ['ja', '일본어'], ['zh', '중국어'], ['ko', '한국어']];
+
+/** 해외 영상 자막 만들기 단계 — 무게는 대략 걸리는 시간 비율 */
+const STAGES: StageDef[] = [
+  { id: 'load', label: '영상 불러오기', weight: 8 },
+  { id: 'audio', label: '영상에서 소리 꺼내기', weight: 7 },
+  { id: 'model', label: '음성 인식 모델 준비 (처음 한 번만)', weight: 15 },
+  { id: 'transcribe', label: '원어 자막 만들기', weight: 40 },
+  { id: 'translate', label: '한국어로 번역', weight: 28 },
+  { id: 'save', label: '저장', weight: 2 },
+];
 
 interface Job {
   projectId: string;
@@ -46,7 +57,7 @@ export function TranslateView() {
   const [glossaryText, setGlossaryText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [busy, setBusy] = useState<{ label: string; ratio: number; startedAt: number } | null>(null);
+  const [busy, setBusy] = useState<{ run: StageRun | null; startedAt: number; done: boolean } | null>(null);
   const [notice, setNotice] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -62,23 +73,28 @@ export function TranslateView() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const startedAt = Date.now();
-    setBusy({ label: '영상 불러오는 중', ratio: 0, startedAt });
+    // 모델을 내려받은 적이 있는지 — 이미 받아 뒀으면 그 단계는 "이미 준비됨"으로 보인다
+    let sawDownload = false;
+    const step = (next: StageRun) => setBusy((b) => (b ? { ...b, run: next } : b));
+    setBusy({ run: { stageId: 'load', ratio: 0, message: '준비 중' }, startedAt, done: false });
     useUiStore.getState().setStatus({ kind: 'busy', text: '해외 영상 한국어 자막을 만드는 중…', startedAt });
     try {
       // ① 프로젝트로 들여오기 (원본은 이 컴퓨터 안에만 있다)
-      const { projectId } = await createProjectFromFile(file, (p) => setBusy({ label: p.label, ratio: p.ratio * 0.25, startedAt }), ctrl.signal, {
+      const { projectId } = await createProjectFromFile(file, (p) => step({ stageId: 'load', ratio: p.ratio, message: p.label }), ctrl.signal, {
         sourceTool: 'translate', pipelineStage: 1,
       });
       const bundle = await loadProjectBundle(projectId);
-      const source = file;
 
-      // ② 원어 자막 만들기
+      // ② 원어 자막 만들기 — 구간마다 방금 알아들은 말을 보여 준다
       const onStt = (p: WorkerProgress) => {
-        const ratio = p.total > 0 ? p.done / p.total : 0;
-        setBusy({ label: p.phase === 'download' ? '음성 인식 모델 내려받는 중 (처음 한 번만)' : '원어 자막을 만드는 중', ratio: 0.25 + ratio * 0.4, startedAt });
+        const next = sttStage(p);
+        if (next.stageId === 'model') sawDownload = true;
+        step({ ...next, skipped: next.stageId === 'transcribe' && !sawDownload ? ['model'] : undefined });
       };
       const stt = await transcribeProject({
-        project: bundle.project, asset: bundle.asset, source, engine: 'local-whisper', language: sourceLang === 'auto' ? 'en' : sourceLang,
+        project: bundle.project, asset: bundle.asset, source: file, engine: 'local-whisper',
+        // "자동 감지"는 언어를 지정하지 않아야 Whisper가 스스로 알아낸다
+        language: sourceLang,
         model: WHISPER_MODELS[whisper].repo, onProgress: onStt, signal: ctrl.signal,
       });
       const { transcript, words } = await saveTranscript(projectId, 'local-whisper', stt.language, stt.words, settings.getFillers());
@@ -86,10 +102,13 @@ export function TranslateView() {
 
       if (built.clips.length === 0) {
         useUiStore.getState().toast({ kind: 'error', title: '말소리를 찾지 못했습니다.', hint: '인식 언어를 지정하거나 다른 영상으로 시도해 주세요.' });
+        setBusy(null);
         return;
       }
 
-      // ③ 번역
+      // ③ 번역 — 묶음마다 방금 번역한 문장을 보여 준다
+      const skipped = sawDownload ? undefined : ['model'];
+      step({ stageId: 'translate', ratio: 0, message: `자막 ${built.clips.length}줄 번역 준비`, skipped });
       const cues = built.clips.map((c) => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: c.captionTextOriginal }));
       const rows = await runTranslate({
         engine,
@@ -99,20 +118,28 @@ export function TranslateView() {
         mode,
         glossary: parseGlossary(glossaryText),
         signal: ctrl.signal,
-        onProgress: (done, total, message) => setBusy({ label: message ?? '번역하는 중', ratio: 0.65 + (total ? done / total : 0) * 0.35, startedAt }),
+        onProgress: (done, total, message, preview) => step({
+          stageId: 'translate',
+          ratio: total ? done / total : 0,
+          message: message ?? '번역하는 중',
+          detail: { chunk: done, chunks: total, text: preview },
+          skipped,
+        }),
       });
 
       // ④ 클립에 원어·한국어를 함께 담아 저장 (2단계에서 바로 쓴다)
+      step({ stageId: 'save', ratio: 0.5, message: '프로젝트에 저장하는 중', skipped });
       const clips = renumberClips(built.clips.map((c, i) => ({ ...c, translatedText: rows[i]?.translated ?? '' })));
       await saveProjectDoc(bundle.project, { ...bundle.doc, clips, words: built.words }, [], createHistory());
       await getDb().transcripts.update(transcript.id, { language: stt.language });
 
+      // 100%를 잠깐 보여 준 뒤 결과 표로 넘어간다
+      setBusy((b) => (b ? { ...b, run: { stageId: 'save', ratio: 1, skipped }, done: true } : b));
       setJob({ projectId, fileName: file.name, rows });
       useUiStore.getState().setStatus({ kind: 'done', text: `한국어 자막 ${rows.length}줄을 만들었습니다.` });
+      setTimeout(() => setBusy((b) => (b?.done ? null : b)), 1500);
     } catch (e) {
-      const err = toAppError(e);
-      useUiStore.getState().showError(err);
-    } finally {
+      useUiStore.getState().showError(toAppError(e));
       setBusy(null);
     }
   };
@@ -222,16 +249,15 @@ export function TranslateView() {
       </Section>
 
       {busy ? (
-        <Section title="만드는 중">
-          <div className="space-y-2" role="status" aria-live="polite">
-            <p className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> {busy.label}</p>
-            <Progress value={Math.round(busy.ratio * 100)} aria-label="자막 만들기 진행률" />
-            <div className="flex items-center justify-between">
-              <ElapsedTimer startedAt={busy.startedAt} className="text-xs tabular-nums text-muted-foreground" />
-              <Button size="sm" variant="outline" onClick={() => abortRef.current?.abort()}><X /> 취소</Button>
-            </div>
-          </div>
-        </Section>
+        <StageProgress
+          title="한국어 자막 만들기"
+          stages={STAGES}
+          run={busy.run}
+          startedAt={busy.startedAt}
+          done={busy.done}
+          onCancel={() => abortRef.current?.abort()}
+          textLabel={busy.run?.stageId === 'translate' ? '방금 번역한 문장' : '방금 알아들은 말'}
+        />
       ) : (
         <Button size="lg" disabled={!file} onClick={() => (meta.sendsTextToServer ? setNotice(true) : void run())}>
           <Play /> 한국어 자막 생성

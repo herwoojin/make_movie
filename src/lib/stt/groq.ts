@@ -44,7 +44,7 @@ export function createGroqAdapter(apiKey: string | undefined): SttAdapter {
         form.append('response_format', 'verbose_json');
         form.append('timestamp_granularities[]', 'word');
         form.append('timestamp_granularities[]', 'segment');
-        if (language) form.append('language', language);
+        if (language && language !== 'auto') form.append('language', language);
 
         let res: Response;
         try {
