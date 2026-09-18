@@ -6,6 +6,14 @@ export type PanelId = 'autocut' | 'subtitle' | 'style' | 'mosaic' | 'export';
 export type StyleScope = 'clips' | 'all';
 export type StylePanelTab = 'style' | 'speed';
 
+/** 화면 아래 상태 바에 보여줄 한 줄 (PRD-v2 F-12) */
+export interface StatusLine {
+  kind: 'idle' | 'busy' | 'done' | 'error';
+  text: string;
+  hint?: string;
+  startedAt?: number;
+}
+
 export interface Toast {
   id: string;
   kind: 'info' | 'success' | 'error';
@@ -43,6 +51,9 @@ interface UiState {
   /** 꾸미기 패널 안의 탭 (클립 툴바에서도 바로 열 수 있어 스토어에 둔다) */
   stylePanelTab: StylePanelTab;
   openStylePanel: (tab: StylePanelTab) => void;
+  status: StatusLine;
+  setStatus: (status: StatusLine) => void;
+  clearStatus: () => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -57,8 +68,12 @@ export const useUiStore = create<UiState>((set, get) => ({
   dismiss: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
   showError: (e) => {
     const err = toAppError(e);
-    if (err.code === 'ABORTED') return;
+    if (err.code === 'ABORTED') {
+      get().setStatus({ kind: 'idle', text: '취소했습니다' });
+      return;
+    }
     get().toast({ kind: 'error', title: err.message, hint: err.hint });
+    get().setStatus({ kind: 'error', text: err.message, hint: err.hint });
   },
   drawMosaic: false,
   setDrawMosaic: (drawMosaic) => set({ drawMosaic }),
@@ -74,4 +89,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   setStyleScope: (styleScope) => set({ styleScope }),
   stylePanelTab: 'style',
   openStylePanel: (stylePanelTab) => set({ stylePanelTab, panel: 'style' }),
+  status: { kind: 'idle', text: '준비 완료' },
+  setStatus: (status) => set({ status }),
+  clearStatus: () => set({ status: { kind: 'idle', text: '준비 완료' } }),
 }));

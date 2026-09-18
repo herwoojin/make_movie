@@ -8,7 +8,15 @@ import type {
 
 export type * from '@/types/models';
 
-export const SCHEMA_VERSION = 2;
+/** 저장 폴더 권한 (사용자가 한 번 고르면 다음부터 그 폴더로 바로 저장한다) */
+export interface FsHandleRecord {
+  id: string;
+  handle: FileSystemDirectoryHandle;
+  name: string;
+  updatedAt: number;
+}
+
+export const SCHEMA_VERSION = 3;
 
 export class EditOnDB extends Dexie {
   projects!: Table<Project, string>;
@@ -31,6 +39,8 @@ export class EditOnDB extends Dexie {
   savedResults!: Table<SavedResult, string>;
   voiceProfiles!: Table<VoiceProfile, string>;
   glossaries!: Table<Glossary, string>;
+  /** 저장 폴더 권한 핸들 (File System Access API). 값은 구조화 복제로 그대로 보관된다 */
+  fsHandles!: Table<FsHandleRecord, string>;
 
   constructor(name = 'editon') {
     super(name);
@@ -112,6 +122,9 @@ export class EditOnDB extends Dexie {
         await tx.table('editClips').bulkAdd(clips);
       }
     });
+
+    // v3: 저장 폴더 권한 핸들 보관 (F-11 3단계 저장)
+    this.version(3).stores({ fsHandles: 'id' });
   }
 }
 

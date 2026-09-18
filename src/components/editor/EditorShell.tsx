@@ -29,7 +29,7 @@ export function EditorShell({ projectId }: { projectId: string }) {
 
   return (
     <SessionGate status={status} error={error}>
-      <div className="flex h-[calc(100vh-3rem)] flex-col">
+      <div className="flex h-[calc(100vh-4.75rem)] flex-col">
         <EditorTopBar undo={false} />
         <RelinkBanner />
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">

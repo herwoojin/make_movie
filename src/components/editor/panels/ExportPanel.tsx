@@ -14,6 +14,7 @@ import { EXPORT_PRESETS, getPreset, resolveOutputSize } from '@/lib/encode/prese
 import { settings, type EncoderPreference } from '@/lib/settings';
 import { getDb } from '@/lib/storage/db';
 import { buildProjectFile } from '@/lib/storage/projectRepo';
+import { saveAndRecord } from '@/lib/storage/savedResults';
 import { cn, downloadBlob, formatBytes } from '@/lib/utils';
 import type { Progress } from '@/lib/worker/protocol';
 import { useProjectStore } from '@/store/projectStore';
@@ -41,7 +42,7 @@ export function ExportPanel() {
   const isVideo = preset.format === 'mp4' || preset.format === 'gif';
   const opts = { presetId, encoderPref, burnSubtitles: burn && hasCues && isVideo, applyMosaic: mosaic && hasTracks && isVideo, mosaicHoldMs: holdMs };
   const estimate = useMemo(() => (asset ? estimateExportMs(asset, doc, opts) : null), [asset, doc, presetId, encoderPref, burn, mosaic]); // eslint-disable-line react-hooks/exhaustive-deps
-  const size = asset ? resolveOutputSize(preset, asset.width ?? 0, asset.height ?? 0) : null;
+  const size = asset ? resolveOutputSize(preset, asset.width ?? 0, asset.height ?? 0, doc.view.aspectMode) : null;
   const outMs = outputDurationMs(doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
 
   const start = async () => {
@@ -53,6 +54,7 @@ export function ExportPanel() {
     setResult(null);
     setRun({ progress: null, startedAt: Date.now(), encoder: null });
     const baseTitle = document.title;
+    useUiStore.getState().setStatus({ kind: 'busy', text: '완성 영상을 만드는 중…', startedAt: Date.now() });
     try {
       const res = await runExport({
         project, asset: a, source, doc: useProjectStore.getState().doc, ...opts, signal: ctrl.signal,
@@ -66,9 +68,17 @@ export function ExportPanel() {
         },
       });
       setResult(res);
-      downloadBlob(res.blob, res.fileName);
+      const kind = preset.format === 'gif' ? 'gif' : preset.format === 'wav' || preset.format === 'mp3' ? 'audio' : 'video';
+      const { outcome } = await saveAndRecord({
+        blob: res.blob, fileName: res.fileName, kind, toolId: 'auto-edit', durationMs: outMs, projectId: project.id,
+      });
       await getDb().projects.update(project.id, { status: 'done' });
-      useUiStore.getState().toast({ kind: 'success', title: '내보내기가 끝났습니다.', hint: `${formatBytes(res.blob.size)} · ${formatDuration(res.elapsedMs)} 걸림. 다운로드 폴더를 확인하세요.` });
+      useUiStore.getState().setStatus({ kind: 'done', text: `저장 완료 · ${outcome.location}`, hint: outcome.method === 'sidecar' ? outcome.localPath : undefined });
+      useUiStore.getState().toast({
+        kind: 'success',
+        title: `내보내기가 끝났습니다. (${outcome.location})`,
+        hint: `${formatBytes(res.blob.size)} · ${formatDuration(res.elapsedMs)} 걸림. 최근 저장 결과에서 다시 받을 수 있습니다.`,
+      });
     } catch (e) {
       useUiStore.getState().showError(e);
     } finally {

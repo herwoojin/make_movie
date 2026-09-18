@@ -8,6 +8,8 @@ export const paths = {
   thumb: (projectId: string, timeMs: number) => `projects/${projectId}/thumbs/${String(timeMs).padStart(6, '0')}.webp`,
   tempDir: (projectId: string, jobId: string) => `projects/${projectId}/temp/${jobId}`,
   export: (projectId: string, jobId: string, ext: string) => `projects/${projectId}/exports/${jobId}.${ext}`,
+  /** 최근 저장 결과 사본 (F-11). 프로젝트를 지워도 남는다 */
+  savedResult: (id: string, fileName: string) => `results/${id}/${fileName.replace(/[/\\]/g, '_')}`,
 };
 
 export function isOpfsSupported(): boolean {

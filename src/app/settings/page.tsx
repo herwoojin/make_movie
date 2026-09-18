@@ -3,6 +3,7 @@ import { CapabilityReport } from '@/components/landing/CapabilityReport';
 import { AccountBox } from '@/components/settings/AccountBox';
 import { ByokSettings } from '@/components/settings/ByokSettings';
 import { ExportDefaults } from '@/components/settings/ExportDefaults';
+import { SaveFolderBox } from '@/components/settings/SaveFolderBox';
 import { StorageCleanup } from '@/components/settings/StorageCleanup';
 import { TechStackBox } from '@/components/settings/TechStackBox';
 
@@ -14,6 +15,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold">설정</h1>
       <ByokSettings />
       <ExportDefaults />
+      <SaveFolderBox />
       <StorageCleanup />
       <AccountBox />
       <CapabilityReport />

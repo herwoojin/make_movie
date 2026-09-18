@@ -50,7 +50,8 @@ export function useEditorShortcuts(enabled: boolean): void {
           e.preventDefault();
           player.pause();
           const fps = useProjectStore.getState().asset?.fps ?? 30;
-          const step = e.shiftKey ? 5000 : frameDurationMs(fps);
+          // 기본은 5초, Shift를 누르면 1프레임 (PRD-v2 F-12)
+          const step = e.shiftKey ? frameDurationMs(fps) : 5000;
           seekTo(player.currentMs() + (e.code === 'ArrowLeft' ? -step : step));
           return;
         }

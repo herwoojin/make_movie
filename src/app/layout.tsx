@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { ServerBattery } from '@/components/layout/ServerBattery';
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister';
+import { StatusBar } from '@/components/layout/StatusBar';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { Toaster } from '@/components/layout/Toaster';
 import { pretendard } from './fonts';
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </a>
         <SiteHeader />
         <AppShell>{children}</AppShell>
+        <StatusBar />
         <Toaster />
         <ServerBattery />
         <ServiceWorkerRegister />

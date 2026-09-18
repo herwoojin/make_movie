@@ -31,7 +31,7 @@ export function Sidebar() {
         aria-label="기능 메뉴"
         className={cn(
           'scrollbar-thin z-30 w-60 shrink-0 space-y-4 overflow-y-auto border-r bg-background p-3',
-          'fixed inset-y-12 left-0 transition-transform lg:sticky lg:top-12 lg:h-[calc(100vh-3rem)] lg:translate-x-0',
+          'fixed bottom-7 left-0 top-12 transition-transform lg:sticky lg:top-12 lg:h-[calc(100vh-4.75rem)] lg:translate-x-0',
           open ? 'translate-x-0 shadow-xl' : '-translate-x-full',
         )}
       >

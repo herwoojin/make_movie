@@ -2,6 +2,7 @@
 
 import { Loader2, Mic } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { ElapsedTimer } from '@/components/common/ElapsedTimer';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/ui/field';
 import { Label, NativeSelect, Progress } from '@/components/ui/misc';
@@ -30,6 +31,7 @@ export function TranscribeBox() {
   const [engine, setEngine] = useState<SttEnginePreference>('local-whisper');
   const [language, setLanguage] = useState('ko');
   const [progress, setProgress] = useState<WorkerProgress | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
   const [notice, setNotice] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => setEngine(settings.getSttEngine()), []);
@@ -40,6 +42,8 @@ export function TranscribeBox() {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setProgress({ phase: 'analyze', done: 0, total: 1, message: '준비 중' });
+    setStartedAt(Date.now());
+    useUiStore.getState().setStatus({ kind: 'busy', text: '음성을 글자로 바꾸는 중…', startedAt: Date.now() });
     try {
       const result = await transcribeProject({ project, asset, source, engine, language, signal: ctrl.signal, onProgress: setProgress });
       const { transcript, words } = await saveTranscript(project.id, engine, result.language, result.words, settings.getFillers());
@@ -50,6 +54,7 @@ export function TranscribeBox() {
         title: words.length ? `자막 클립 ${count}개를 만들었습니다.` : '말소리를 찾지 못했습니다.',
         hint: words.length ? '가운데 목록에서 지우고 싶은 단어의 ⊗를 누르면 영상에서 바로 빠집니다.' : '언어 설정을 확인하거나 다른 엔진을 써 보세요.',
       });
+      useUiStore.getState().setStatus({ kind: 'done', text: `자막 클립 ${count}개를 만들었습니다.` });
     } catch (e) {
       useUiStore.getState().showError(e);
     } finally {
@@ -82,7 +87,10 @@ export function TranscribeBox() {
         <div className="space-y-2" role="status">
           <p className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> {d.text}</p>
           <Progress value={d.pct} aria-label="자막 생성 진행률" />
-          <Button size="sm" variant="outline" onClick={() => abortRef.current?.abort()}>취소</Button>
+          <div className="flex items-center justify-between">
+            <ElapsedTimer startedAt={startedAt} className="text-xs tabular-nums text-muted-foreground" />
+            <Button size="sm" variant="outline" onClick={() => abortRef.current?.abort()}>취소</Button>
+          </div>
         </div>
       ) : (
         <Button onClick={() => (meta.sendsAudioToServer ? setNotice(true) : void run())} disabled={!hasAudio}>

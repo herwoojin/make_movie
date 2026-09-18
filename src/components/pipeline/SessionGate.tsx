@@ -19,7 +19,7 @@ export function SessionGate({ status, error, children }: { status: string; error
   }
   if (status !== 'ready') {
     return (
-      <div className="flex h-[calc(100vh-3rem)] items-center justify-center gap-2 text-muted-foreground" role="status">
+      <div className="flex h-[calc(100vh-4.75rem)] items-center justify-center gap-2 text-muted-foreground" role="status">
         <Loader2 className="h-5 w-5 animate-spin" /> 프로젝트를 여는 중…
       </div>
     );

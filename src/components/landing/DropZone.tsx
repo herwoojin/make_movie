@@ -4,6 +4,7 @@ import { Film, Sparkles, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type DragEvent } from 'react';
 import type { PipelineStage, SourceTool } from '@/types/models';
+import { ElapsedTimer } from '@/components/common/ElapsedTimer';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/misc';
 import { ACCEPT_VIDEO, createProjectFromFile, type ImportProgress } from '@/lib/editor/importPipeline';
@@ -29,12 +30,14 @@ export function DropZone({ to = '/editor/:id', sourceTool, pipelineStage, hint, 
   const abortRef = useRef<AbortController | null>(null);
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
 
   const start = async (file: File) => {
     if (progress) return;
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setProgress({ stage: 'check', ratio: 0, label: '준비 중' });
+    setStartedAt(Date.now());
     try {
       const { projectId, warnings } = await createProjectFromFile(file, setProgress, ctrl.signal, { sourceTool, pipelineStage });
       warnings.forEach((w) => useUiStore.getState().toast({ kind: 'info', title: w }));
@@ -82,7 +85,10 @@ export function DropZone({ to = '/editor/:id', sourceTool, pipelineStage, hint, 
           <Film className="mx-auto h-10 w-10 animate-pulse text-primary" />
           <p className="font-medium">{progress.label}</p>
           <Progress value={Math.round(progress.ratio * 100)} aria-label="불러오기 진행률" />
-          <Button variant="ghost" size="sm" onClick={() => { abortRef.current?.abort(); setProgress(null); }}>취소</Button>
+          <div className="flex items-center justify-center gap-3">
+            <ElapsedTimer startedAt={startedAt} className="text-xs tabular-nums text-muted-foreground" />
+            <Button variant="ghost" size="sm" onClick={() => { abortRef.current?.abort(); setProgress(null); }}>취소</Button>
+          </div>
         </div>
       ) : (
         <>

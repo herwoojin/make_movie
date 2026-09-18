@@ -2,6 +2,7 @@
 
 import { Loader2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { ElapsedTimer } from '@/components/common/ElapsedTimer';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/ui/field';
 import { Progress } from '@/components/ui/misc';
@@ -42,7 +43,9 @@ export function ExportProgressView({ run, onCancel }: { run: { progress: WorkerP
         <Progress value={ratio * 100} aria-label="내보내기 진행률" />
         <div className="flex justify-between text-xs text-muted-foreground">
           <span className="tabular-nums">{Math.round(ratio * 100)}%</span>
-          <span>경과 {formatDuration(Date.now() - run.startedAt)}{eta !== undefined && ` · 남은 시간 약 ${formatDuration(eta)}`}</span>
+          <span className="tabular-nums">
+            <ElapsedTimer startedAt={run.startedAt} />{eta !== undefined && ` · 남은 시간 약 ${formatDuration(eta)}`}
+          </span>
         </div>
         {run.encoder && <p className="text-xs text-muted-foreground">사용 중: {ENCODER[run.encoder]}</p>}
         <Button variant="destructive" onClick={onCancel}><X /> 취소</Button>

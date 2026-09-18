@@ -51,7 +51,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     items: [
-      { href: '/recent', label: '최근 저장 결과', icon: FileClock, planned: true },
+      { href: '/recent', label: '최근 저장 결과', icon: FileClock },
       { href: '/projects', label: '내 프로젝트', icon: FolderOpen },
       { href: '/settings', label: '설정', icon: Settings },
     ],
