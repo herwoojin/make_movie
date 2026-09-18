@@ -1,7 +1,7 @@
 'use client';
 
 // 클립 목록 위 도구 모음. 되돌리기·선택 삭제처럼 "방금 한 일"을 다루는 버튼만 둔다.
-import { Download, ListChecks, Trash2 } from 'lucide-react';
+import { Download, Gauge, ListChecks, Palette, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -41,6 +41,9 @@ export function ClipToolbar() {
 
       <span className="text-xs text-muted-foreground">{clipCount}개 자막 클립</span>
       <span className="flex-1" />
+
+      <Button size="sm" variant="ghost" onClick={() => useUiStore.getState().openStylePanel('style')}><Palette /> 자막 서식</Button>
+      <Button size="sm" variant="ghost" onClick={() => useUiStore.getState().openStylePanel('speed')}><Gauge /> 배속</Button>
 
       <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
         지운 단어 보기

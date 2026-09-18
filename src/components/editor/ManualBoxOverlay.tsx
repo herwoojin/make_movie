@@ -2,7 +2,9 @@
 
 import { useRef, useState, type PointerEvent } from 'react';
 import { addManualMosaic } from '@/lib/editor/actions';
+import { canvasToSourceNorm, previewCanvasSize } from '@/lib/render/frame';
 import type { Box } from '@/lib/vision/tracker';
+import { useProjectStore } from '@/store/projectStore';
 import { useUiStore } from '@/store/uiStore';
 
 /** 미리보기 위에 드래그해서 수동 모자이크 사각형을 그린다 (좌표는 0~1 정규화로 저장) */
@@ -12,9 +14,16 @@ export function ManualBoxOverlay() {
   const origin = useRef<{ x: number; y: number } | null>(null);
   if (!active) return null;
 
+  // 화면 좌표 → 원본 좌표. 비율을 바꿔 여백이 생겼거나 잘라낸 상태에서도 네모가 제자리에 붙는다
   const norm = (e: PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
-    return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+    const nx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    const ny = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    const { doc, asset } = useProjectStore.getState();
+    const srcW = asset?.width || 1280;
+    const srcH = asset?.height || 720;
+    const { width, height } = previewCanvasSize(doc.view, srcW, srcH, 1280);
+    return canvasToSourceNorm(nx, ny, srcW, srcH, width, height, doc.view);
   };
 
   return (

@@ -49,11 +49,16 @@ export interface ExportResult {
 
 export function buildRenderJob(asset: MediaAsset, doc: EditorDoc, opts: ExportOptions): { job: RenderJob; preset: ExportPresetDef } {
   const preset = getPreset(opts.presetId);
-  const size = resolveOutputSize(preset, asset.width ?? 0, asset.height ?? 0);
+  const size = resolveOutputSize(preset, asset.width ?? 0, asset.height ?? 0, doc.view.aspectMode);
+  const speeds = clipSpeedRanges(doc.clips);
   // 자막은 클립에서 만든다 (v2). 결과물 시간으로 옮겨 굽는다.
-  const cues = clipsToCues(doc.clips, doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
+  const cues = clipsToCues(doc.clips, doc.edl, speeds, doc.view.globalSpeed);
   const job: RenderJob = {
     edl: doc.edl,
+    speeds,
+    globalSpeed: doc.view.globalSpeed,
+    pitchPreserve: doc.view.pitchPreserve,
+    view: { aspectMode: doc.view.aspectMode, fillMode: doc.view.fillMode, reframe: doc.view.reframe },
     subtitles: opts.burnSubtitles && cues.length ? cues : undefined,
     style: opts.burnSubtitles && cues.length ? doc.style : undefined,
     mosaicTracks: opts.applyMosaic ? doc.tracks.filter((t) => t.enabled) : undefined,
@@ -74,18 +79,32 @@ export function buildRenderJob(asset: MediaAsset, doc: EditorDoc, opts: ExportOp
   return { job, preset };
 }
 
-export function pickEncoder(pref: EncoderPreference, asset: Pick<MediaAsset, 'fileName' | 'mimeType'>, format: RenderJob['output']['format']): { encoder: UsedEncoder; reason?: string } {
+export function pickEncoder(
+  pref: EncoderPreference, asset: Pick<MediaAsset, 'fileName' | 'mimeType'>, format: RenderJob['output']['format'],
+  speed?: { changed: boolean; pitchPreserve: boolean; uniform: boolean },
+): { encoder: UsedEncoder; reason?: string } {
   if (format === 'wav') return { encoder: 'native' };
   if (pref === 'ffmpeg-wasm') return { encoder: 'ffmpeg-wasm', reason: '설정에서 예비 인코더(ffmpeg)를 선택했습니다.' };
+  // 음정을 유지한 배속은 ffmpeg atempo로만 된다 (WebCodecs 경로는 톤이 함께 바뀐다)
+  if (speed?.changed && speed.pitchPreserve && speed.uniform) {
+    return { encoder: 'ffmpeg-wasm', reason: '음정을 유지한 채로 배속을 걸기 위해 예비 인코더를 씁니다.' };
+  }
   if (!checkEnv().webCodecs) return { encoder: 'ffmpeg-wasm', reason: '이 브라우저는 하드웨어 영상 처리(WebCodecs)를 지원하지 않습니다.' };
   if (!isMp4Like({ name: asset.fileName, type: asset.mimeType })) return { encoder: 'ffmpeg-wasm', reason: 'MP4·MOV가 아닌 원본은 예비 인코더로 처리합니다.' };
   return { encoder: 'webcodecs' };
 }
 
+/** 배속이 걸렸는지·음정 유지인지·모든 클립이 같은 배속인지 (인코더 선택에 쓴다) */
+export function speedPlan(doc: EditorDoc): { changed: boolean; pitchPreserve: boolean; uniform: boolean } {
+  const speeds = new Set(doc.clips.filter((c) => c.enabled).map((c) => c.speed));
+  const changed = doc.view.globalSpeed !== 1 || [...speeds].some((v) => v !== 1);
+  return { changed, pitchPreserve: doc.view.pitchPreserve, uniform: speeds.size <= 1 };
+}
+
 /** 예상 소요 시간. ffmpeg 경로가 10분을 넘으면 시작 전에 경고한다 (PROMPT 7-2) */
 export function estimateExportMs(asset: MediaAsset, doc: EditorDoc, opts: ExportOptions): { encoder: UsedEncoder; ms: number } {
   const { job } = buildRenderJob(asset, doc, opts);
-  const { encoder } = pickEncoder(opts.encoderPref, asset, job.output.format);
+  const { encoder } = pickEncoder(opts.encoderPref, asset, job.output.format, speedPlan(doc));
   const outMs = outputDurationMs(doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
   if (encoder === 'ffmpeg-wasm') {
     const mt = typeof self !== 'undefined' && self.crossOriginIsolated === true;
@@ -123,8 +142,8 @@ export async function runExport(req: ExportRequest): Promise<ExportResult> {
   await db.exportJobs.put(record);
 
   try {
-    let { encoder } = pickEncoder(req.encoderPref, req.asset, job.output.format);
-    req.onEncoder?.(encoder);
+    let { encoder, reason } = pickEncoder(req.encoderPref, req.asset, job.output.format, speedPlan(req.doc));
+    req.onEncoder?.(encoder, encoder === 'ffmpeg-wasm' ? reason : undefined);
     let blob: Blob;
     if (encoder === 'native') {
       blob = await exportWavRanges(req.source, keptRanges(req.doc.edl), req.onProgress, req.signal);

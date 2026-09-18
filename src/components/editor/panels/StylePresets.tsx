@@ -10,6 +10,7 @@ import { deleteRemotePreset } from '@/lib/firebase/sync';
 import { settings } from '@/lib/settings';
 import { BUILT_IN_PRESETS, deletePreset, listPresets, savePreset, styleValuesOf } from '@/lib/subtitle/presets';
 import { useProjectStore } from '@/store/projectStore';
+import { useTimelineStore } from '@/store/timelineStore';
 import { useUiStore } from '@/store/uiStore';
 
 function swatchStyle(p: StylePresetRecord): React.CSSProperties {
@@ -31,7 +32,14 @@ export function StylePresets() {
   useEffect(refresh, [refresh]);
 
   const apply = (p: StylePresetRecord) => {
-    useProjectStore.getState().edit(`스타일 프리셋: ${p.name}`, (d) => { Object.assign(d.style, p.style); });
+    // 프리셋도 지금 정한 적용 범위를 따른다 (선택 클립 / 영상 전체)
+    const { styleScope } = useUiStore.getState();
+    const target = styleScope === 'all' ? 'all' : useTimelineStore.getState().selectedClipIds;
+    if (target !== 'all' && target.length === 0) {
+      useUiStore.getState().toast({ kind: 'info', title: '클립을 먼저 선택하세요.', hint: '가운데 목록에서 왼쪽 체크박스를 누르거나, 적용 범위를 “영상 전체”로 바꾸세요.' });
+      return;
+    }
+    useProjectStore.getState().setClipStyle(target, p.style);
     settings.setLastPresetId(p.id);
   };
 

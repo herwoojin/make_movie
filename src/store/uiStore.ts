@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import { toAppError } from '@/lib/errors';
 
 export type PanelId = 'autocut' | 'subtitle' | 'style' | 'mosaic' | 'export';
+export type StyleScope = 'clips' | 'all';
+export type StylePanelTab = 'style' | 'speed';
 
 export interface Toast {
   id: string;
@@ -35,6 +37,12 @@ interface UiState {
   /** 타임라인(파형·컷 구간)을 펼쳐 둘지 — 평소에는 클립 목록만 보인다 */
   timelineOpen: boolean;
   setTimelineOpen: (on: boolean) => void;
+  /** 서식·배속을 선택 클립에만 줄지, 영상 전체에 줄지 */
+  styleScope: StyleScope;
+  setStyleScope: (scope: StyleScope) => void;
+  /** 꾸미기 패널 안의 탭 (클립 툴바에서도 바로 열 수 있어 스토어에 둔다) */
+  stylePanelTab: StylePanelTab;
+  openStylePanel: (tab: StylePanelTab) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -62,4 +70,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   setShowDeletedWords: (showDeletedWords) => set({ showDeletedWords }),
   timelineOpen: false,
   setTimelineOpen: (timelineOpen) => set({ timelineOpen }),
+  styleScope: 'all',
+  setStyleScope: (styleScope) => set({ styleScope }),
+  stylePanelTab: 'style',
+  openStylePanel: (stylePanelTab) => set({ stylePanelTab, panel: 'style' }),
 }));

@@ -1,6 +1,8 @@
 // 인코더 어댑터 (TRD 4.6). WebCodecs(1순위)와 ffmpeg.wasm(폴백)을 같은 모양으로 감싼다.
 import type { EdlSegment, EncoderId, ExportFormat, StyleValues, SubtitleCue } from '@/types/models';
 import type { MosaicTrackDoc } from '@/types/editor';
+import type { SpeedRange } from '@/lib/core/edl';
+import type { FrameView } from '@/lib/render/frame';
 import type { Progress } from '@/lib/worker/protocol';
 
 export interface RenderOutput {
@@ -14,6 +16,13 @@ export interface RenderOutput {
 
 export interface RenderJob {
   edl: EdlSegment[];
+  /** 배속 구간 (원본 기준). 적용 순서는 원본 → EDL → 배속 */
+  speeds?: SpeedRange[];
+  globalSpeed?: number;
+  /** 배속을 걸어도 목소리 톤을 유지할지 */
+  pitchPreserve?: boolean;
+  /** 화면 비율·채움 방식 (미리보기와 같은 변환을 쓴다) */
+  view?: Pick<FrameView, 'aspectMode' | 'fillMode' | 'reframe'>;
   subtitles?: SubtitleCue[];
   style?: StyleValues;
   mosaicTracks?: MosaicTrackDoc[];

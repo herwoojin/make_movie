@@ -3,18 +3,37 @@
 import { FFmpeg, type FFFSType } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import type { TimeRange } from '@/types/models';
-import { keptRanges, outputToSource } from '@/lib/core/edl';
+import { createTimeMap, keptRanges } from '@/lib/core/edl';
 import { AppError, throwIfAborted, toAppError } from '@/lib/errors';
 import { ensureSubtitleFonts, SUBTITLE_FONT_TTF_URL } from '@/lib/fonts';
 import { toAss } from '@/lib/subtitle/ass';
 import { activeCueAt } from '@/lib/subtitle/model';
 import { renderSubtitleToCanvas } from '@/lib/subtitle/render';
+import { drawSourceFrame, type FrameView } from '@/lib/render/frame';
 import { renderMosaicFrame } from '@/lib/vision/mosaicRender';
 import type { Progress } from '@/lib/worker/protocol';
 import { mimeFor } from '../presets';
 import type { EncoderAdapter, RenderJob } from '../types';
-import { fitLayout } from '../webcodecs/fitLayout';
 import { buildFfmpegArgs, parseFfmpegTime } from './filters';
+
+/** 이 렌더에 쓸 화면 비율 설정 */
+function viewOf(job: RenderJob): FrameView {
+  return {
+    aspectMode: 'original', fillMode: 'blur', reframe: { x: 0.5, y: 0.5, scale: 1 },
+    ...job.view, fallbackFit: job.output.fit,
+  };
+}
+
+/**
+ * 영상 전체에 걸린 하나의 배속. 클립마다 다르면 null.
+ * ffmpeg 필터는 구간마다 다른 배속을 걸 수 없어서, 그럴 때는 기본 인코더(WebCodecs)가 처리한다.
+ */
+export function uniformSpeed(job: RenderJob): number | null {
+  const spans = createTimeMap(job.edl, job.speeds ?? [], job.globalSpeed ?? 1).spans;
+  if (spans.length === 0) return job.globalSpeed ?? 1;
+  const first = spans[0].speed;
+  return spans.every((s) => Math.abs(s.speed - first) < 0.001) ? first : null;
+}
 
 /** 모자이크 프레임을 JPEG로 구워 넘기는 방식은 wasm 메모리 한계 때문에 짧은 결과물만 가능 */
 export const BAKE_LIMIT_MS = 3 * 60 * 1000;
@@ -72,6 +91,8 @@ function waitEvent(target: HTMLVideoElement, event: string): Promise<void> {
 
 async function bakeFrames(ff: FFmpeg, source: File, job: RenderJob, outMs: number, onProgress: (p: Progress) => void, signal: AbortSignal): Promise<void> {
   const { width: W, height: H, fps } = job.output;
+  const view = viewOf(job);
+  const timeMap = createTimeMap(job.edl, job.speeds ?? [], job.globalSpeed ?? 1);
   const url = URL.createObjectURL(source);
   const video = document.createElement('video');
   video.muted = true;
@@ -79,10 +100,14 @@ async function bakeFrames(ff: FFmpeg, source: File, job: RenderJob, outMs: numbe
   video.src = url;
   try {
     await waitEvent(video, 'loadeddata');
-    const geo = fitLayout(video.videoWidth, video.videoHeight, W, H, job.output.fit);
+    // 모자이크는 원본 좌표계에서 그려야 하므로 중간 화면에 먼저 그린다
+    const zoom = view.aspectMode !== 'original' && view.fillMode === 'crop' ? Math.max(1, view.reframe.scale) : 1;
+    const k = Math.min(1, Math.max(W / Math.max(1, video.videoWidth), H / Math.max(1, video.videoHeight)) * zoom);
+    const stageW = Math.max(2, Math.round(video.videoWidth * k));
+    const stageH = Math.max(2, Math.round(video.videoHeight * k));
     const out = new OffscreenCanvas(W, H);
     const ctx = out.getContext('2d');
-    const stage = new OffscreenCanvas(geo.sw, geo.sh);
+    const stage = new OffscreenCanvas(stageW, stageH);
     const sctx = stage.getContext('2d');
     if (!ctx || !sctx) throw new AppError('ENCODE_FAILED', '그리기 화면(캔버스)을 만들 수 없습니다.');
     if (job.subtitles?.length) await ensureSubtitleFonts();
@@ -92,14 +117,12 @@ async function bakeFrames(ff: FFmpeg, source: File, job: RenderJob, outMs: numbe
     for (let i = 0; i < total; i++) {
       throwIfAborted(signal);
       const tOut = Math.round((i * 1000) / fps);
-      const src = outputToSource(tOut, job.edl) ?? 0;
+      const src = timeMap.toSource(tOut) ?? 0;
       video.currentTime = src / 1000;
       await waitEvent(video, 'seeked');
-      sctx.drawImage(video, 0, 0, geo.sw, geo.sh);
+      sctx.drawImage(video, 0, 0, stageW, stageH);
       renderMosaicFrame(sctx, tracks, src, job.mosaicHoldMs);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, W, H);
-      ctx.drawImage(stage, geo.dx, geo.dy);
+      drawSourceFrame(ctx, stage, stageW, stageH, W, H, view);
       const cue = job.style ? activeCueAt(job.subtitles ?? [], tOut) : undefined;
       if (cue && job.style) renderSubtitleToCanvas(ctx, cue, job.style, W);
       const blob = await out.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
@@ -135,7 +158,15 @@ async function execWatched(ff: FFmpeg, args: string[], lastActivity: () => numbe
 async function renderOnce(job: RenderJob, source: File, onProgress: (p: Progress) => void, signal: AbortSignal): Promise<Blob> {
   const ranges: TimeRange[] = keptRanges(job.edl);
   if (ranges.length === 0) throw new AppError('ENCODE_FAILED', '남은 구간이 없어 내보낼 것이 없습니다.', '타임라인에서 최소 한 구간을 살려 주세요.');
-  const outMs = ranges.reduce((a, r) => a + r.endMs - r.startMs, 0);
+  const speed = uniformSpeed(job);
+  if (speed === null) {
+    throw new AppError(
+      'ENCODE_FAILED',
+      '예비 인코더(ffmpeg)는 클립마다 다른 배속을 처리하지 못합니다.',
+      '배속을 “영상 전체”로 하나만 걸거나, Chrome·Edge의 기본 인코더로 내보내 주세요.',
+    );
+  }
+  const outMs = Math.round(ranges.reduce((a, r) => a + r.endMs - r.startMs, 0) / (speed > 0 ? speed : 1));
   const format = job.output.format === 'gif' ? 'gif' : job.output.format === 'mp3' ? 'mp3' : 'mp4';
   const output = `/out.${format}`;
   const mosaicOn = format === 'mp4' && (job.mosaicTracks ?? []).some((t) => t.enabled && t.keyframes.length > 0);
@@ -184,6 +215,12 @@ async function renderOnce(job: RenderJob, source: File, onProgress: (p: Progress
     const built = buildFfmpegArgs({
       input, output, ranges, width: job.output.width, height: job.output.height, fps: job.output.fps,
       fit: job.output.fit, format, hasAudio: job.hasAudio, bitrate: job.output.bitrate, assPath, fontsDir, bakedFramesPattern,
+      // 구운 프레임에는 비율·배속이 이미 반영돼 있다. 소리는 여기서 배속을 맞춘다
+      speed,
+      pitchPreserve: job.pitchPreserve ?? true,
+      view: bakedFramesPattern ? undefined : viewOf(job),
+      srcWidth: job.sourceWidth,
+      srcHeight: job.sourceHeight,
     });
     lastActivity = Date.now();
     const code = await execWatched(ff, mt ? limitThreads(built) : built, () => lastActivity);

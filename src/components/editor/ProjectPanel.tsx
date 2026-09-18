@@ -4,6 +4,7 @@
 import { StageOnePicker } from '@/components/pipeline/StageOnePicker';
 import { OpenWithSrtButton } from '@/components/pipeline/OpenWithSrtButton';
 import { useProjectStore } from '@/store/projectStore';
+import { AspectControls } from './panels/AspectControls';
 
 export function ProjectPanel() {
   const name = useProjectStore((s) => s.asset?.fileName ?? s.project?.name ?? '');
@@ -20,6 +21,8 @@ export function ProjectPanel() {
         <StageOnePicker />
         <OpenWithSrtButton />
       </div>
+      {/* 우측 서식 패널의 비율 토글과 같은 값을 본다 (PRD-v2 F-04) */}
+      <AspectControls compact />
     </section>
   );
 }

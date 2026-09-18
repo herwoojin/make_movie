@@ -1,5 +1,5 @@
 // 내보내기 프리셋. 원본보다 크게 키우지 않는다(용량만 늘고 화질은 그대로).
-import type { ExportFormat, ExportPreset } from '@/types/models';
+import type { AspectMode, ExportFormat, ExportPreset } from '@/types/models';
 
 export interface ExportPresetDef {
   id: ExportPreset;
@@ -29,13 +29,23 @@ export function getPreset(id: string): ExportPresetDef {
 
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
-export function resolveOutputSize(preset: ExportPresetDef, srcWidth: number, srcHeight: number): { width: number; height: number } {
+export function resolveOutputSize(
+  preset: ExportPresetDef, srcWidth: number, srcHeight: number, aspectMode: AspectMode = 'original',
+): { width: number; height: number } {
   if (preset.fixed) return preset.fixed;
   const w = srcWidth > 0 ? srcWidth : 1920;
   const h = srcHeight > 0 ? srcHeight : 1080;
   const long = Math.max(w, h);
-  const scale = Math.min(1, (preset.longSide ?? long) / long);
-  return { width: even(w * scale), height: even(h * scale) };
+  if (aspectMode === 'original') {
+    const scale = Math.min(1, (preset.longSide ?? long) / long);
+    return { width: even(w * scale), height: even(h * scale) };
+  }
+  // 편집 중에 바꾼 비율이 우선한다. 크기는 원본보다 키우지 않는다
+  const ratio = aspectMode === '16:9' ? 16 / 9 : 9 / 16;
+  const side = Math.min(preset.longSide ?? long, long);
+  return ratio >= 1
+    ? { width: even(side), height: even(side / ratio) }
+    : { width: even(side * ratio), height: even(side) };
 }
 
 export function resolveFps(preset: ExportPresetDef, sourceFps: number): number {

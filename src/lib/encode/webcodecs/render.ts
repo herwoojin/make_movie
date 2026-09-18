@@ -2,20 +2,20 @@
 // mp4box 디먹스 → VideoDecoder → OffscreenCanvas(모자이크 → 자막) → VideoEncoder → mp4-muxer
 // 오디오: AudioDecoder → 유지 구간 이어붙이기(5ms 크로스페이드) → AudioEncoder
 import { ArrayBufferTarget, Muxer, StreamTarget } from 'mp4-muxer';
-import { keptRanges } from '@/lib/core/edl';
+import { createTimeMap, keptRanges } from '@/lib/core/edl';
 import { AppError, throwIfAborted, toAppError } from '@/lib/errors';
 import { ensureSubtitleFonts } from '@/lib/fonts';
 import { buildPalette, GifEncoder } from '@/lib/gif/encoder';
 import { openSyncHandle, type SyncHandle } from '@/lib/storage/opfsSync';
 import { activeCueAt } from '@/lib/subtitle/model';
 import { renderSubtitleToCanvas } from '@/lib/subtitle/render';
+import { drawSourceFrame } from '@/lib/render/frame';
 import { renderMosaicFrame } from '@/lib/vision/mosaicRender';
 import type { Progress } from '@/lib/worker/protocol';
 import { AudioSplicer, CROSSFADE_MS, LinearResampler, msRangesToSamples, planarToBuffer } from '../audioSplice';
-import { createOutputMapper } from '../outputMapper';
+import { hasSpeedChange, speedSpansToSamples, VariableSpeedResampler } from '../speedAudio';
 import type { RenderJob } from '../types';
 import { Mp4Demuxer, sampleDurationUs, sampleTimeUs } from './demux';
-import { fitLayout } from './fitLayout';
 
 export interface RenderResult {
   path?: string;
@@ -62,8 +62,10 @@ export async function renderWithWebCodecs(
 ): Promise<RenderResult> {
   const ranges = keptRanges(job.edl);
   if (ranges.length === 0) throw new AppError('ENCODE_FAILED', '남은 구간이 없어 내보낼 것이 없습니다.', '타임라인에서 최소 한 구간을 살려 주세요.');
-  const mapper = createOutputMapper(ranges);
+  // 원본 → 컷 → 배속 → 결과물. 이 표 하나로 프레임 시각과 자막·오디오 길이가 모두 결정된다
+  const timeMap = createTimeMap(job.edl, job.speeds ?? [], job.globalSpeed ?? 1);
   const lastEndMs = ranges[ranges.length - 1].endMs;
+  const view = { aspectMode: 'original' as const, fillMode: 'blur' as const, reframe: { x: 0.5, y: 0.5, scale: 1 }, ...job.view, fallbackFit: job.output.fit };
 
   const demux = await Mp4Demuxer.open(file, signal);
   const v = demux.info.video;
@@ -82,9 +84,11 @@ export async function renderWithWebCodecs(
   const out = new OffscreenCanvas(W, H);
   const octx = out.getContext('2d', { willReadFrequently: isGif });
   if (!octx) throw new AppError('ENCODE_FAILED', '그리기 화면(캔버스)을 만들 수 없습니다.');
+  // 모자이크는 원본 좌표계에서 그려야 하므로 항상 중간 화면(stage)에 먼저 그린다
   let stage: OffscreenCanvas | null = null;
-  let sctx: OffscreenCanvasRenderingContext2D = octx;
-  let geo: ReturnType<typeof fitLayout> | null = null;
+  let sctx: OffscreenCanvasRenderingContext2D | null = null;
+  let stageW = 0;
+  let stageH = 0;
 
   let failure: unknown = null;
   const fail = (e: unknown) => { failure ??= e; };
@@ -155,30 +159,28 @@ export async function renderWithWebCodecs(
       try {
         if (failure) return;
         const srcMs = frame.timestamp / 1000;
-        const outMs = mapper.map(srcMs);
+        const outMs = timeMap.toOutput(srcMs);
         if (outMs === null) return;
         const outUs = Math.round(outMs * 1000);
         // 목표 fps보다 촘촘한 프레임은 버린다 (60fps 원본 → 30fps 출력 등)
         if (outUs < nextDueUs - frameDurUs / 2) return;
         nextDueUs = (Math.floor(outUs / frameDurUs) + 1) * frameDurUs;
 
-        if (!geo) {
-          geo = fitLayout(frame.displayWidth, frame.displayHeight, W, H, job.output.fit);
-          if (geo.sw !== W || geo.sh !== H) {
-            stage = new OffscreenCanvas(geo.sw, geo.sh);
-            const c = stage.getContext('2d');
-            if (!c) throw new AppError('ENCODE_FAILED', '그리기 화면(캔버스)을 만들 수 없습니다.');
-            sctx = c;
-          }
+        if (!sctx || !stage) {
+          // 결과 화면을 덮을 만큼만 크게 — 잘라내기로 확대했으면 그만큼 더 크게
+          const zoom = view.aspectMode !== 'original' && view.fillMode === 'crop' ? Math.max(1, view.reframe.scale) : 1;
+          const k = Math.min(1, Math.max(W / frame.displayWidth, H / frame.displayHeight) * zoom);
+          stageW = Math.max(2, Math.round(frame.displayWidth * k));
+          stageH = Math.max(2, Math.round(frame.displayHeight * k));
+          stage = new OffscreenCanvas(stageW, stageH);
+          const c = stage.getContext('2d');
+          if (!c) throw new AppError('ENCODE_FAILED', '그리기 화면(캔버스)을 만들 수 없습니다.');
+          sctx = c;
         }
-        sctx.drawImage(frame, 0, 0, geo.sw, geo.sh);
+        sctx.drawImage(frame, 0, 0, stageW, stageH);
         // 모자이크는 원본 비율 화면에서 먼저, 자막은 최종 화면 위에 나중에 (자막이 가려지지 않게)
         if (mosaic.length) renderMosaicFrame(sctx, mosaic, srcMs, job.mosaicHoldMs);
-        if (stage) {
-          octx.fillStyle = '#000';
-          octx.fillRect(0, 0, W, H);
-          octx.drawImage(stage, geo.dx, geo.dy);
-        }
+        drawSourceFrame(octx, stage, stageW, stageH, W, H, view);
         if (burn && job.style) {
           const cue = activeCueAt(cues, outMs);
           if (cue) renderSubtitleToCanvas(octx, cue, job.style, W);
@@ -219,6 +221,17 @@ export async function renderWithWebCodecs(
       const outRate = enc.config.sampleRate;
       const splicer = new AudioSplicer(msRangesToSamples(ranges, a.sampleRate), outCh, Math.round((a.sampleRate * CROSSFADE_MS) / 1000));
       const resampler = outRate !== a.sampleRate ? new LinearResampler(a.sampleRate, outRate, outCh) : null;
+      // 컷을 이어 붙인 시간(배속 전) 기준 배속 구간 — 붙인 순서대로 길이를 누적하면 그대로 나온다
+      let acc = 0;
+      const cutSpeedSpans = timeMap.spans.map((sp) => {
+        const len = sp.sourceEndMs - sp.sourceStartMs;
+        const span = { startMs: acc, endMs: acc + len, speed: sp.speed };
+        acc += len;
+        return span;
+      });
+      const speeder = hasSpeedChange(cutSpeedSpans, job.globalSpeed ?? 1)
+        ? new VariableSpeedResampler(speedSpansToSamples(cutSpeedSpans, a.sampleRate), outCh, job.globalSpeed ?? 1)
+        : null;
       const mux = muxer;
       let cursor: number | null = null;
       let emitted = 0;
@@ -226,7 +239,8 @@ export async function renderWithWebCodecs(
       encoder.configure(enc.config);
       audioEncoder = encoder;
       const emit = (planes: Float32Array[]) => {
-        const p = resampler ? resampler.process(planes) : planes;
+        const sped = speeder ? speeder.process(planes) : planes;
+        const p = resampler ? resampler.process(sped) : sped;
         const n = p[0]?.length ?? 0;
         if (n === 0) return;
         // 오디오 타임스탬프는 출력 샘플 수로만 계산 — 영상 싱크의 기준 (GUIDE 7장)

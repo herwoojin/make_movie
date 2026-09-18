@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildFfmpegArgs, estimateFfmpegMs, parseFfmpegTime, scaleFilter, sec, selectExpression } from './filters';
+import type { FrameView } from '@/lib/render/frame';
+import { atempoChain, buildFfmpegArgs, estimateFfmpegMs, frameFilter, parseFfmpegTime, sec, selectExpression } from './filters';
+
+const view = (p: Partial<FrameView> = {}): FrameView => ({
+  aspectMode: 'original', fillMode: 'blur', reframe: { x: 0.5, y: 0.5, scale: 1 }, ...p,
+});
 
 const ranges = [{ startMs: 0, endMs: 3200 }, { startMs: 5100, endMs: 9800 }];
 const base = { input: '/in/a.mp4', output: '/out.mp4', ranges, width: 1280, height: 720, fps: 30, fit: 'contain' as const, hasAudio: true, bitrate: 0 };
@@ -35,8 +40,35 @@ describe('ffmpeg filters', () => {
     expect(buildFfmpegArgs({ ...base, hasAudio: false, format: 'mp4', bakedFramesPattern: '/f/%06d.jpg' })).not.toContain('1:a');
   });
 
-  it('cover 스케일은 crop', () => {
-    expect(scaleFilter(1080, 1920, 'cover')).toContain('crop=1080:1920');
+  it('cover 맞춤은 crop', () => {
+    expect(frameFilter(1080, 1920, 'cover')).toContain('crop=1080:1920');
+  });
+
+  it('비율을 바꾸면 블러 배경 그래프 / 단색은 pad / 잘라내기는 crop', () => {
+    const blur = frameFilter(1080, 1920, 'contain', view({ aspectMode: '9:16', fillMode: 'blur' }), 1920, 1080);
+    expect(blur).toContain('boxblur=');
+    expect(blur).toContain('overlay=(W-w)/2:(H-h)/2');
+
+    expect(frameFilter(1080, 1920, 'contain', view({ aspectMode: '9:16', fillMode: 'solid' }), 1920, 1080))
+      .toBe('scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black');
+
+    // 가로 영상을 9:16으로 잘라내면 가운데를 기준으로 오려낸다
+    expect(frameFilter(1080, 1920, 'contain', view({ aspectMode: '9:16', fillMode: 'crop' }), 1920, 1080))
+      .toBe('scale=3414:1920,crop=1080:1920:1167:0');
+  });
+
+  it('배속: 영상은 setpts, 소리는 atempo(음정 유지) / asetrate(음정 변화)', () => {
+    const keep = buildFfmpegArgs({ ...base, format: 'mp4', speed: 1.5, pitchPreserve: true });
+    expect(keep[keep.indexOf('-vf') + 1]).toContain('setpts=PTS/1.5');
+    expect(keep[keep.indexOf('-af') + 1]).toContain('atempo=1.5000');
+
+    const shift = buildFfmpegArgs({ ...base, format: 'mp4', speed: 1.5, pitchPreserve: false });
+    expect(shift[shift.indexOf('-af') + 1]).toContain('asetrate=48000*1.5');
+
+    expect(buildFfmpegArgs({ ...base, format: 'mp4', speed: 1 })[base ? 0 : 0]).toBe('-i');
+    expect(atempoChain(4)).toBe('atempo=2.0,atempo=2.0000');
+    expect(atempoChain(0.25)).toBe('atempo=0.5,atempo=0.5000');
+    expect(atempoChain(1.5)).toBe('atempo=1.5000');
   });
 
   it('로그 time= 파싱', () => {
