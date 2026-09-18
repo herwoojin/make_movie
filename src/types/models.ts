@@ -192,6 +192,8 @@ export interface MosaicTrack {
   shape: 'rect' | 'ellipse';
   emoji?: string;
   createdBy: 'auto' | 'manual';
+  /** 직접 그린 영역: 고정(영상 내내 같은 자리) / 움직임(시점마다 자리 기록). 없으면 고정 */
+  motion?: 'static' | 'moving';
   startMs: number;            // 원본 기준
   endMs: number;
   /** 대표 썸네일 (작은 JPEG data URL). 인물 목록에서 누가 누구인지 알아보기 위함 */

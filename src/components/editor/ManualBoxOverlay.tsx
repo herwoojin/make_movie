@@ -3,6 +3,7 @@
 import { useRef, useState, type PointerEvent } from 'react';
 import { addManualMosaic } from '@/lib/editor/actions';
 import { canvasToSourceNorm, previewCanvasSize } from '@/lib/render/frame';
+import { RANGE_LABELS } from '@/lib/vision/manualRegion';
 import type { Box } from '@/lib/vision/tracker';
 import { useProjectStore } from '@/store/projectStore';
 import { useUiStore } from '@/store/uiStore';
@@ -10,6 +11,7 @@ import { useUiStore } from '@/store/uiStore';
 /** 미리보기 위에 드래그해서 수동 모자이크 사각형을 그린다 (좌표는 0~1 정규화로 저장) */
 export function ManualBoxOverlay() {
   const active = useUiStore((s) => s.drawMosaic);
+  const range = useUiStore((s) => s.regionRange);
   const [rect, setRect] = useState<Box | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
   if (!active) return null;
@@ -46,7 +48,7 @@ export function ManualBoxOverlay() {
       }}
     >
       <p className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded bg-black/80 px-3 py-1 text-xs text-white">
-        가릴 곳을 드래그해서 네모로 그리세요 (Esc: 취소)
+        가릴 곳을 드래그해서 네모로 그리세요 · {RANGE_LABELS[range]} (Esc: 취소)
       </p>
       {rect && (
         <div className="pointer-events-none absolute border-2 border-red-500 bg-red-500/20"

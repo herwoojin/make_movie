@@ -41,13 +41,13 @@ test('WebCodecs: 자막 번인 + 수동 모자이크를 넣어도 영상·소리
   await textarea.blur();
 
   await openPanel(page, '모자이크');
-  await page.getByRole('button', { name: /미리보기에 네모 그리기/ }).click();
+  await page.getByRole('button', { name: /직접 영역 그리기/ }).click();
   const box = (await page.getByRole('img', { name: /편집 결과 미리보기/ }).boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 5 });
   await page.mouse.up();
-  await expect(page.getByText(/직접 그린 영역 1/).first()).toBeVisible();
+  await expect(page.getByText(/직접 가린 영역 1/).first()).toBeVisible();
 
   try {
     const { file } = await exportWith(page, /유튜브 720p/);
@@ -79,7 +79,7 @@ test('얼굴 찾기: MediaPipe 워커가 불러와지고 스캔이 끝난다', a
   const errors = collectErrors(page);
   await importVideo(page, FIXTURES.sample);
   await openPanel(page, '모자이크');
-  await page.getByRole('button', { name: /^얼굴 찾기$/ }).click();
+  await page.getByRole('button', { name: /^얼굴 자동 찾기$/ }).click();
   await expect(page.getByText(/얼굴을 찾지 못했습니다|얼굴을 찾았습니다/)).toBeVisible({ timeout: 90_000 });
   await expect(errorToasts(page)).toHaveCount(0);
   expect(errors).toEqual([]);

@@ -30,7 +30,7 @@ test('주요 화면 스크린샷', async ({ page }) => {
   await shot('04-editor-style');
 
   await openPanel(page, '모자이크');
-  await page.getByRole('button', { name: /미리보기에 네모 그리기/ }).click();
+  await page.getByRole('button', { name: /직접 영역 그리기/ }).click();
   const box = (await page.getByRole('img', { name: /편집 결과 미리보기/ }).boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.2);
   await page.mouse.down();

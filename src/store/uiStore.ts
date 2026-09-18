@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { create } from 'zustand';
 import { toAppError } from '@/lib/errors';
+import type { RegionRange } from '@/lib/vision/manualRegion';
 
 export type PanelId = 'autocut' | 'subtitle' | 'style' | 'mosaic' | 'export';
 export type StyleScope = 'clips' | 'all';
@@ -31,6 +32,9 @@ interface UiState {
   /** 에러를 사용자용 문장(무엇이 + 다음에 할 일)으로 보여준다. 취소는 조용히 넘긴다 */
   showError: (e: unknown) => void;
   drawMosaic: boolean;
+  /** 새로 그리는 가림 영역을 어느 구간에 걸지 */
+  regionRange: RegionRange;
+  setRegionRange: (range: RegionRange) => void;
   setDrawMosaic: (on: boolean) => void;
   /** 미리보기에 모자이크를 실제로 적용해 보여줄지 (끄면 원본 얼굴 위에 테두리만) */
   previewMosaic: boolean;
@@ -77,6 +81,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   drawMosaic: false,
   setDrawMosaic: (drawMosaic) => set({ drawMosaic }),
+  regionRange: 'all',
+  setRegionRange: (regionRange) => set({ regionRange }),
   previewMosaic: true,
   setPreviewMosaic: (previewMosaic) => set({ previewMosaic }),
   autoFollow: true,

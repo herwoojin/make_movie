@@ -1,6 +1,7 @@
 // 여러 곳(단축키·재생바·타임라인·패널)에서 같은 편집 명령을 쓰기 위한 액션 모음.
 import { nanoid } from 'nanoid';
 import { renumberClips } from '@/lib/core/clips';
+import { clampBox, placeRegion, RANGE_LABELS, rangeFor, type RegionRange } from '@/lib/vision/manualRegion';
 import { moveBoundary, segmentAt, sortSegments, splitAt, toggleSegment } from '@/lib/core/edl';
 import { frameDurationMs } from '@/lib/core/timecode';
 import type { Box } from '@/lib/vision/tracker';
@@ -56,21 +57,40 @@ export function nudgeSegmentEdge(id: string, edge: 'start' | 'end', frames: numb
   seekTo(at + frames * frameMs);
 }
 
-export function addManualMosaic(box: Box): void {
+/** 미리보기에 그린 네모로 가림 영역을 만든다 (얼굴 말고 이메일·번호판 등). range: 가릴 구간 */
+export function addManualMosaic(box: Box, range: RegionRange = useUiStore.getState().regionRange): void {
   const { project, asset, doc, edit } = useProjectStore.getState();
   if (!project || !asset) return;
   const t = useTimelineStore.getState().currentMs;
+  const { startMs, endMs } = rangeFor(range, t, asset.durationMs);
   const id = `man-${nanoid(8)}`;
   const n = doc.tracks.filter((x) => x.createdBy === 'manual').length + 1;
-  edit('직접 그린 모자이크 추가', (d) => {
-    d.tracks.push({
-      id, projectId: project.id, personLabel: `직접 그린 영역 ${n}`, enabled: true, mode: 'pixelate', intensity: 28, scale: 1,
-      shape: 'rect', emoji: '😊', createdBy: 'manual', startMs: t, endMs: Math.min(asset.durationMs, t + 3000),
-      keyframes: [{ id: `${id}-k0`, trackId: id, timeMs: t, x: box.x, y: box.y, w: box.w, h: box.h, score: 1, interpolated: false }],
+  const b = clampBox(box);
+  edit('직접 가릴 영역 추가', (d) => {
+    // 새로 그린 영역이 목록 맨 위에 오도록 앞에 넣는다
+    d.tracks.unshift({
+      id, projectId: project.id, personLabel: `직접 가린 영역 ${n}`, enabled: true, mode: 'pixelate', intensity: 28, scale: 1,
+      shape: 'rect', emoji: '😊', createdBy: 'manual', motion: 'static', startMs, endMs,
+      keyframes: [{ id: `${id}-k0`, trackId: id, timeMs: Math.max(startMs, Math.min(endMs, t)), ...b, score: 1, interpolated: false }],
     });
   });
   useTimelineStore.getState().selectTrack(id);
-  useUiStore.getState().toast({ kind: 'success', title: '지금 위치부터 3초 동안 가립니다.', hint: '모자이크 목록에서 시작·끝을 현재 위치로 맞출 수 있습니다.' });
+  useUiStore.getState().toast({
+    kind: 'success',
+    title: `${RANGE_LABELS[range]} 동안 가립니다.`,
+    hint: '미리보기에서 네모를 끌어 옮기거나 모서리로 크기를 바꿀 수 있습니다.',
+  });
+}
+
+/** 선택한 직접 영역을 옮기거나 크기를 바꾼다 (고정이면 영상 내내, 움직임이면 지금 시각에 기록) */
+export function placeManualRegion(trackId: string, box: Box): void {
+  const t = useTimelineStore.getState().currentMs;
+  const frameMs = Math.ceil(frameDurationMs(useProjectStore.getState().asset?.fps ?? 30));
+  useProjectStore.getState().edit('가릴 영역 옮기기', (d) => {
+    const track = d.tracks.find((x) => x.id === trackId);
+    if (!track) return;
+    track.keyframes = placeRegion(track.keyframes, trackId, t, box, track.motion ?? 'static', frameMs, () => `${trackId}-k${nanoid(6)}`);
+  });
 }
 
 /** 음성 인식 없이 자막을 넣을 때: 재생 위치에 2초짜리 빈 클립을 만든다 (단어 칩은 없다) */

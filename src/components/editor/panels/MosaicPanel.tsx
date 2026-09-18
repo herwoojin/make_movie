@@ -5,7 +5,9 @@ import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/ui/field';
 import { Progress, Switch } from '@/components/ui/misc';
+import { Segmented } from '@/components/ui/segmented';
 import { scanFaces } from '@/lib/editor/faceScan';
+import { RANGE_LABELS, type RegionRange } from '@/lib/vision/manualRegion';
 import { progressRatio, type Progress as WorkerProgress } from '@/lib/worker/protocol';
 import { useProjectStore } from '@/store/projectStore';
 import { useUiStore } from '@/store/uiStore';
@@ -15,6 +17,7 @@ import { PersonList } from './PersonList';
 export function MosaicPanel() {
   const autoCount = useProjectStore((s) => s.doc.tracks.filter((t) => t.createdBy === 'auto').length);
   const drawing = useUiStore((s) => s.drawMosaic);
+  const regionRange = useUiStore((s) => s.regionRange);
   const previewMosaic = useUiStore((s) => s.previewMosaic);
   const [progress, setProgress] = useState<WorkerProgress | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -43,17 +46,37 @@ export function MosaicPanel() {
 
   return (
     <>
-      <Section title="얼굴 자동 찾기" description="영상 전체에서 얼굴을 찾아 인물별로 따라다니며 가립니다. 5프레임마다 찾고 사이를 부드럽게 이어 붙입니다. 영상은 이 컴퓨터 밖으로 나가지 않습니다.">
-        {progress ? (
+      <Section
+        title="가릴 곳 추가"
+        description="얼굴은 자동으로 찾아 따라다니며 가립니다. 이메일·전화번호·명찰·번호판처럼 얼굴이 아닌 곳은 미리보기에 네모를 직접 그려 가립니다. 영상은 이 컴퓨터 밖으로 나가지 않습니다."
+      >
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant={drawing ? 'secondary' : 'default'} onClick={() => useUiStore.getState().setDrawMosaic(!drawing)}>
+            <Square /> {drawing ? '그리기 취소' : '직접 영역 그리기'}
+          </Button>
+          <Button variant="secondary" disabled={!!progress} onClick={() => void scan()}>
+            <ScanFace /> {autoCount ? '얼굴 다시 찾기' : '얼굴 자동 찾기'}
+          </Button>
+        </div>
+        <Segmented
+          label="직접 그린 영역을 가릴 구간"
+          value={regionRange}
+          options={Object.entries(RANGE_LABELS) as [RegionRange, string][]}
+          onChange={(v) => useUiStore.getState().setRegionRange(v)}
+        />
+        {drawing && (
+          <p className="rounded-md bg-primary/10 p-2 text-xs text-primary">
+            미리보기 화면 위에서 가릴 곳을 끌어 네모를 그리세요. 그린 뒤에도 끌어서 옮기고 모서리로 크기를 바꿀 수 있습니다.
+          </p>
+        )}
+        {progress && (
           <div className="space-y-2" role="status">
             <p className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" /> 얼굴 찾는 중 {Math.round(progressRatio(progress) * 100)}%</p>
             <Progress value={progressRatio(progress) * 100} aria-label="얼굴 찾기 진행률" />
             <Button size="sm" variant="outline" onClick={() => abortRef.current?.abort()}>취소</Button>
           </div>
-        ) : (
-          <Button onClick={() => void scan()}><ScanFace /> {autoCount ? '얼굴 다시 찾기' : '얼굴 찾기'}</Button>
         )}
-        {autoCount > 0 && !progress && <p className="text-xs text-muted-foreground">다시 찾으면 자동으로 찾은 목록만 바뀌고, 직접 그린 영역은 유지됩니다.</p>}
+        {autoCount > 0 && !progress && <p className="text-xs text-muted-foreground">얼굴을 다시 찾으면 자동으로 찾은 목록만 바뀌고, 직접 그린 영역은 그대로 남습니다.</p>}
         <label className="flex items-center justify-between gap-2 text-sm">
           미리보기에 모자이크 적용해서 보기
           <Switch checked={previewMosaic} onCheckedChange={useUiStore.getState().setPreviewMosaic} aria-label="미리보기에 모자이크 적용" />
@@ -62,12 +85,6 @@ export function MosaicPanel() {
 
       <PersonList />
       <MosaicControls />
-
-      <Section title="직접 가리기" description="자동으로 못 찾은 얼굴, 명찰, 차량 번호판 등은 미리보기 위에 네모를 그려 가립니다.">
-        <Button variant={drawing ? 'secondary' : 'default'} onClick={() => useUiStore.getState().setDrawMosaic(!drawing)}>
-          <Square /> {drawing ? '그리기 취소' : '미리보기에 네모 그리기'}
-        </Button>
-      </Section>
     </>
   );
 }

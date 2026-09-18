@@ -111,6 +111,19 @@ export function canvasToSourceNorm(
   };
 }
 
+/** 원본 위의 네모(0~1)가 화면 위 어디에 보이는지 (canvasToSourceNorm의 반대) */
+export function sourceToCanvasBox(
+  box: { x: number; y: number; w: number; h: number }, srcW: number, srcH: number, outW: number, outH: number, view: FrameView,
+): { x: number; y: number; w: number; h: number } {
+  const r = fitRect(srcW, srcH, outW, outH, fitModeOf(view), view.reframe);
+  return {
+    x: (r.dx + box.x * r.dw) / outW,
+    y: (r.dy + box.y * r.dh) / outH,
+    w: (box.w * r.dw) / outW,
+    h: (box.h * r.dh) / outH,
+  };
+}
+
 /** 잘라내기 화면을 끌어서 옮겼을 때의 새 reframe */
 export function dragReframe(
   reframe: ReframeBox, deltaXPx: number, deltaYPx: number, srcW: number, srcH: number, outW: number, outH: number,

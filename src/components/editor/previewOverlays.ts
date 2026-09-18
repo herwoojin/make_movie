@@ -1,6 +1,7 @@
 // 미리보기 전용 보조 표시(내보내기에는 들어가지 않음): 인물 테두리, 잘린 구간 표시.
 import type { MosaicTrackDoc } from '@/types/editor';
-import { boxAt, scaleBox, type Box } from '@/lib/vision/tracker';
+import { trackBoxAt } from '@/lib/vision/mosaicRender';
+import { scaleBox } from '@/lib/vision/tracker';
 
 export function drawTrackOutlines(
   ctx: CanvasRenderingContext2D, tracks: readonly MosaicTrackDoc[], sourceMs: number, holdMs: number, selectedId: string | null,
@@ -10,12 +11,7 @@ export function drawTrackOutlines(
   ctx.save();
   ctx.font = `600 ${Math.max(12, W / 70)}px Pretendard, sans-serif`;
   for (const t of tracks) {
-    let box: Box | null;
-    if (t.createdBy === 'manual') {
-      box = sourceMs >= t.startMs && sourceMs <= t.endMs ? t.keyframes[0] ?? null : null;
-    } else {
-      box = boxAt(t.keyframes, sourceMs, holdMs);
-    }
+    const box = trackBoxAt(t, sourceMs, holdMs);
     if (!box) continue;
     const b = scaleBox(box, t.scale);
     const selected = t.id === selectedId;

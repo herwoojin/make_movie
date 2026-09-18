@@ -4,10 +4,10 @@ import type { MosaicMode, MosaicTrack } from '@/types/models';
 import { Button } from '@/components/ui/button';
 import { Section, SliderField } from '@/components/ui/field';
 import { Segmented } from '@/components/ui/segmented';
-import { formatShort } from '@/lib/core/timecode';
 import { cn } from '@/lib/utils';
 import { useProjectStore } from '@/store/projectStore';
 import { useTimelineStore } from '@/store/timelineStore';
+import { RegionSettings } from './RegionSettings';
 
 const MODES: [MosaicMode, string][] = [['pixelate', '픽셀'], ['blur', '흐리게'], ['box', '검은 박스'], ['emoji', '이모지']];
 const EMOJIS = ['😊', '🙂', '😎', '🐶', '🐱', '⭐', '❤️', '🙈'];
@@ -24,8 +24,6 @@ export function MosaicControls() {
       d.tracks.forEach((t) => { if (!target || t.id === target.id) Object.assign(t, patch); });
     }, { history });
   };
-
-  const now = () => useTimelineStore.getState().currentMs;
 
   return (
     <Section
@@ -46,18 +44,13 @@ export function MosaicControls() {
         <SliderField label="강도" value={current.intensity} min={4} max={80}
           hint="픽셀은 블록 크기, 흐리게는 흐림 정도입니다. 클수록 알아보기 어렵습니다." onChange={(v) => apply({ intensity: v })} />
       )}
-      <SliderField label="가리는 영역 크기" value={current.scale} min={1} max={2.5} step={0.05} format={(v) => `${v.toFixed(2)}배`}
-        hint="얼굴보다 얼마나 넓게 가릴지 정합니다. 머리카락·귀까지 가리려면 늘리세요." onChange={(v) => apply({ scale: v })} />
-      <Segmented label="모양" value={current.shape} options={[['rect', '사각형'], ['ellipse', '타원']]} onChange={(shape) => apply({ shape }, true)} />
-      {target?.createdBy === 'manual' && (
-        <div className="space-y-1.5 rounded-md border p-2 text-xs">
-          <p>가리는 시간: {formatShort(target.startMs)} – {formatShort(target.endMs)}</p>
-          <div className="flex gap-1">
-            <Button size="sm" variant="secondary" onClick={() => apply({ startMs: now(), endMs: Math.max(target.endMs, now() + 100) }, true)}>시작 = 현재 위치</Button>
-            <Button size="sm" variant="secondary" onClick={() => apply({ endMs: now(), startMs: Math.min(target.startMs, now() - 100) }, true)}>끝 = 현재 위치</Button>
-          </div>
-        </div>
+      {/* 직접 그린 영역은 모서리를 끌어 크기를 정하므로 "얼굴보다 넓게" 배율은 얼굴에만 보인다 */}
+      {target?.createdBy !== 'manual' && (
+        <SliderField label="가리는 영역 크기" value={current.scale} min={1} max={2.5} step={0.05} format={(v) => `${v.toFixed(2)}배`}
+          hint="얼굴보다 얼마나 넓게 가릴지 정합니다. 머리카락·귀까지 가리려면 늘리세요." onChange={(v) => apply({ scale: v })} />
       )}
+      <Segmented label="모양" value={current.shape} options={[['rect', '사각형'], ['ellipse', '타원']]} onChange={(shape) => apply({ shape }, true)} />
+      {target?.createdBy === 'manual' && <RegionSettings track={target} />}
     </Section>
   );
 }

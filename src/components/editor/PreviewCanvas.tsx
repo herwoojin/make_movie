@@ -14,6 +14,7 @@ import { useProjectStore } from '@/store/projectStore';
 import { useTimelineStore } from '@/store/timelineStore';
 import { useUiStore } from '@/store/uiStore';
 import { ManualBoxOverlay } from './ManualBoxOverlay';
+import { RegionEditOverlay } from './RegionEditOverlay';
 import { drawCutTint, drawTrackOutlines } from './previewOverlays';
 
 const MAX_PREVIEW_WIDTH = 1280;
@@ -140,6 +141,7 @@ export function PreviewCanvas() {
           role="img"
           aria-label={canDrag ? '편집 결과 미리보기 (끌어서 보여줄 영역 옮기기)' : '편집 결과 미리보기 (누르면 재생/정지)'}
         />
+        <RegionEditOverlay />
         <ManualBoxOverlay />
         {!sourceUrl && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">원본 영상을 불러오지 못했습니다</div>

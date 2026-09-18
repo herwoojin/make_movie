@@ -30,7 +30,8 @@ export function PersonList() {
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { useTimelineStore.getState().selectTrack(t.id); seekTo(t.startMs); }}>
               <p className="truncate text-sm">{t.personLabel}</p>
               <p className="text-xs text-muted-foreground">
-                {formatShort(t.startMs)} – {formatShort(t.endMs)}{t.createdBy === 'manual' ? ' · 직접 그림' : ''}
+                {formatShort(t.startMs)} – {formatShort(t.endMs)}
+                {t.createdBy === 'manual' ? ` · 직접 가림${t.motion === 'moving' ? ' · 움직임' : ''}` : ''}
               </p>
             </button>
             <div className="flex w-16 shrink-0 flex-col items-center gap-0.5">

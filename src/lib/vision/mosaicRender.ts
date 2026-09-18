@@ -1,6 +1,7 @@
 // 모자이크 렌더 — 미리보기·내보내기·사진 일괄 처리가 모두 이 함수를 쓴다.
 // 이미 프레임이 그려진 캔버스 위에서, 해당 영역의 픽셀을 읽어 가공한 뒤 다시 그린다.
 import type { MosaicKeyframe, MosaicTrack } from '@/types/models';
+import { manualBoxAt } from './manualRegion';
 import { boxAt, scaleBox, type Box } from './tracker';
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -103,17 +104,18 @@ export function renderMosaicRegion(ctx: Ctx2D, box: Box, style: MosaicStyle): vo
   ctx.restore();
 }
 
-/** 원본 시각 sourceMs에 켜져 있는 모든 인물·수동 박스를 그린다. holdMs: 검출 샘플 간격(첫/마지막 검출 앞뒤 노출 방지) */
+/** 이 시각에 대상이 있는 자리 (확대 배율 적용 전). 미리보기 테두리·모자이크·내보내기가 모두 이것을 쓴다 */
+export function trackBoxAt(track: MosaicTrackDoc, sourceMs: number, holdMs: number): Box | null {
+  if (track.keyframes.length === 0) return null;
+  if (track.createdBy === 'manual') return manualBoxAt(track, track.keyframes, sourceMs);
+  return boxAt(track.keyframes, sourceMs, holdMs);
+}
+
+/** 원본 시각 sourceMs에 켜져 있는 모든 인물·직접 그린 영역을 그린다. holdMs: 검출 샘플 간격(첫/마지막 검출 앞뒤 노출 방지) */
 export function renderMosaicFrame(ctx: Ctx2D, tracks: readonly MosaicTrackDoc[], sourceMs: number, holdMs: number): void {
   for (const track of tracks) {
-    if (!track.enabled || track.keyframes.length === 0) continue;
-    let box: Box | null;
-    if (track.createdBy === 'manual') {
-      if (sourceMs < track.startMs || sourceMs > track.endMs) continue;
-      box = track.keyframes.length === 1 ? track.keyframes[0] : boxAt(track.keyframes, sourceMs, track.endMs - track.startMs);
-    } else {
-      box = boxAt(track.keyframes, sourceMs, holdMs);
-    }
+    if (!track.enabled) continue;
+    const box = trackBoxAt(track, sourceMs, holdMs);
     if (!box) continue;
     renderMosaicRegion(ctx, scaleBox(box, track.scale), track);
   }
