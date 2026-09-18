@@ -21,7 +21,7 @@ export function PanelHost() {
   const panel = useUiStore((s) => s.panel);
   const setPanel = useUiStore((s) => s.setPanel);
   return (
-    <aside className="flex max-h-[45vh] shrink-0 flex-col border-b lg:max-h-none lg:w-[400px] lg:border-b-0 lg:border-r" aria-label="편집 기능">
+    <aside className="flex max-h-[45vh] min-h-0 flex-1 flex-col border-b lg:max-h-none lg:border-b-0 lg:border-r" aria-label="편집 기능">
       <div role="tablist" aria-label="기능 선택" className="flex border-b">
         {PANELS.map(({ id, label, icon: Icon }, i) => (
           <button

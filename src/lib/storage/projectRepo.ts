@@ -42,6 +42,25 @@ export async function listProjects(): Promise<Project[]> {
   return getDb().projects.orderBy('updatedAt').reverse().toArray();
 }
 
+export interface ProjectRow {
+  project: Project;
+  clipCount: number;
+}
+
+/** 프로젝트 고르기 화면용 — "N개 자막 클립"을 함께 보여준다 */
+export async function listProjectRows(): Promise<ProjectRow[]> {
+  const db = getDb();
+  const projects = await listProjects();
+  return Promise.all(projects.map(async (project) => ({
+    project,
+    clipCount: await db.editClips.where('projectId').equals(project.id).count(),
+  })));
+}
+
+export async function setPipelineStage(projectId: string, pipelineStage: Project['pipelineStage']): Promise<void> {
+  await getDb().projects.update(projectId, { pipelineStage, updatedAt: Date.now() });
+}
+
 export async function loadProjectBundle(projectId: string): Promise<ProjectBundle> {
   const db = getDb();
   const project = await db.projects.get(projectId);

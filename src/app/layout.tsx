@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import { AppShell } from '@/components/layout/AppShell';
 import { ServerBattery } from '@/components/layout/ServerBattery';
 import { ServiceWorkerRegister } from '@/components/layout/ServiceWorkerRegister';
 import { SiteHeader } from '@/components/layout/SiteHeader';
@@ -29,7 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           본문으로 건너뛰기
         </a>
         <SiteHeader />
-        <main id="main">{children}</main>
+        <AppShell>{children}</AppShell>
         <Toaster />
         <ServerBattery />
         <ServiceWorkerRegister />

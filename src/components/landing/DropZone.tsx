@@ -3,6 +3,7 @@
 import { Film, Sparkles, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type DragEvent } from 'react';
+import type { PipelineStage, SourceTool } from '@/types/models';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/misc';
 import { ACCEPT_VIDEO, createProjectFromFile, type ImportProgress } from '@/lib/editor/importPipeline';
@@ -12,7 +13,17 @@ import { useUiStore } from '@/store/uiStore';
 
 export const SAMPLE_URL = '/sample/editon-sample.mp4';
 
-export function DropZone() {
+interface Props {
+  /** 다 불러온 뒤 갈 곳. `:id` 자리에 새 프로젝트 id가 들어간다 (서버 컴포넌트에서도 넘길 수 있게 문자열) */
+  to?: string;
+  sourceTool?: SourceTool;
+  pipelineStage?: PipelineStage;
+  hint?: string;
+  /** 샘플 영상 체험 버튼 (처음 화면에서만) */
+  showSample?: boolean;
+}
+
+export function DropZone({ to = '/editor/:id', sourceTool, pipelineStage, hint, showSample = true }: Props = {}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -25,9 +36,9 @@ export function DropZone() {
     abortRef.current = ctrl;
     setProgress({ stage: 'check', ratio: 0, label: '준비 중' });
     try {
-      const { projectId, warnings } = await createProjectFromFile(file, setProgress, ctrl.signal);
+      const { projectId, warnings } = await createProjectFromFile(file, setProgress, ctrl.signal, { sourceTool, pipelineStage });
       warnings.forEach((w) => useUiStore.getState().toast({ kind: 'info', title: w }));
-      router.push(`/editor/${projectId}`);
+      router.push(to.replace(':id', projectId));
     } catch (e) {
       useUiStore.getState().showError(e);
       setProgress(null);
@@ -77,10 +88,12 @@ export function DropZone() {
         <>
           <Upload className="h-12 w-12 text-primary" aria-hidden />
           <Button size="xl" onClick={() => inputRef.current?.click()}>영상 올리기</Button>
-          <p className="text-sm text-muted-foreground">또는 영상 파일을 여기에 끌어다 놓으세요 · MP4·MOV·WebM · 20분 이하 권장</p>
-          <Button variant="link" onClick={() => void trySample()}>
-            <Sparkles /> 영상이 없나요? 샘플 영상으로 30초 체험
-          </Button>
+          <p className="text-sm text-muted-foreground">{hint ?? '또는 영상 파일을 여기에 끌어다 놓으세요 · MP4·MOV·WebM · 20분 이하 권장'}</p>
+          {showSample && (
+            <Button variant="link" onClick={() => void trySample()}>
+              <Sparkles /> 영상이 없나요? 샘플 영상으로 30초 체험
+            </Button>
+          )}
         </>
       )}
     </div>

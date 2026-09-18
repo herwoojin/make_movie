@@ -21,11 +21,11 @@ export default function HomePage() {
           영상 하나 올리면,<br />무음이 잘리고 자막이 붙고 얼굴이 가려집니다.
         </h1>
         <ul className="mx-auto max-w-2xl space-y-1 text-base text-muted-foreground sm:text-lg">
-          <li>① 말 없는 구간과 추임새를 자동으로 찾아 잘라 줍니다.</li>
-          <li>② 자막을 자동으로 만들고, 원하는 모양으로 꾸밀 수 있습니다.</li>
-          <li>③ 영상은 인터넷으로 전송되지 않고 이 컴퓨터 안에서만 처리됩니다.</li>
+          <li><b className="text-foreground">1단계</b> 말 없는 구간과 추임새를 자동으로 찾아 잘라 줍니다.</li>
+          <li><b className="text-foreground">2단계</b> 자막을 만들고 <b className="text-foreground">단어 하나까지</b> 눌러서 지웁니다.</li>
+          <li>영상은 인터넷으로 전송되지 않고 이 컴퓨터 안에서만 처리됩니다.</li>
         </ul>
-        <DropZone />
+        <DropZone to="/auto-edit?project=:id" sourceTool="auto-edit" pipelineStage={1} />
       </section>
 
       <RecentProjects />

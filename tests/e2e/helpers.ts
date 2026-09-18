@@ -36,10 +36,19 @@ export function ffprobe(file: string): ProbeInfo {
   };
 }
 
-export async function importVideo(page: Page, file: string): Promise<void> {
+/** 영상을 올려 1단계(자동편집)로 들어간다 */
+export async function importVideoStageOne(page: Page, file: string): Promise<string> {
   await page.goto('/');
   await page.locator('input[type=file]').first().setInputFiles(file);
-  await page.waitForURL(/\/editor\//, { timeout: 60_000 });
+  await page.waitForURL(/\/auto-edit\?project=/, { timeout: 60_000 });
+  await expect(page.getByRole('button', { name: /무음 찾기|다시 찾기/ })).toBeVisible({ timeout: 60_000 });
+  return new URL(page.url()).searchParams.get('project') ?? '';
+}
+
+/** 영상을 올린 뒤 2단계(자막·영상 편집)까지 연다 */
+export async function importVideo(page: Page, file: string): Promise<void> {
+  const projectId = await importVideoStageOne(page, file);
+  await page.goto(`/editor/${projectId}`);
   await expect(page.getByRole('button', { name: /무음 찾기|다시 찾기/ })).toBeVisible({ timeout: 60_000 });
 }
 

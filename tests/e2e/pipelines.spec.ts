@@ -86,7 +86,7 @@ test('얼굴 찾기: MediaPipe 워커가 불러와지고 스캔이 끝난다', a
 });
 
 test('도구함: GIF 일괄 변환', async ({ page }) => {
-  await page.goto('/tools');
+  await page.goto('/tools/gif');
   await page.locator('input[type=file][accept="video/*"]').first().setInputFiles(FIXTURES.silence);
   await page.getByRole('button', { name: /모두 GIF로 변환/ }).click();
   const downloading = page.waitForEvent('download', { timeout: 90_000 });

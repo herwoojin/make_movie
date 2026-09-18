@@ -1,20 +1,19 @@
 'use client';
 
-import { AlertTriangle, Check, Loader2, Redo2, Undo2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { AlertTriangle, Check, Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/misc';
+import { clipSpeedRanges } from '@/lib/core/clips';
 import { formatDuration } from '@/lib/core/timecode';
 import { outputDurationMs } from '@/lib/core/edl';
-import { redoWithToast, undoWithToast } from '@/lib/editor/actions';
 import { useProjectStore } from '@/store/projectStore';
+import { UndoRedo } from './UndoRedo';
 
-export function EditorTopBar() {
+/** undo: 되돌리기 버튼을 여기에 둘지 (2단계는 클립 툴바에 있어서 끈다) */
+export function EditorTopBar({ undo = true }: { undo?: boolean }) {
   const project = useProjectStore((s) => s.project);
   const saveState = useProjectStore((s) => s.saveState);
   const analysis = useProjectStore((s) => s.analysis);
-  const undoLabel = useProjectStore((s) => s.history.past[s.history.past.length - 1]?.label);
-  const redoLabel = useProjectStore((s) => s.history.future[0]?.label);
-  const outMs = useProjectStore((s) => outputDurationMs(s.doc.edl));
+  const outMs = useProjectStore((s) => outputDurationMs(s.doc.edl, clipSpeedRanges(s.doc.clips), s.doc.view.globalSpeed));
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b bg-card/60 px-3 py-1.5 text-sm">
@@ -33,14 +32,7 @@ export function EditorTopBar() {
           <Progress value={Math.round(analysis.ratio * 100)} className="h-1.5 w-24" aria-label="소리 분석 진행률" />
         </div>
       )}
-      <div className="ml-auto flex items-center gap-1">
-        <Button size="sm" variant="ghost" disabled={!undoLabel} onClick={undoWithToast} title={undoLabel ? `되돌리기: ${undoLabel} (Ctrl+Z)` : '되돌릴 것이 없습니다'} aria-label="되돌리기">
-          <Undo2 />
-        </Button>
-        <Button size="sm" variant="ghost" disabled={!redoLabel} onClick={redoWithToast} title={redoLabel ? `다시 하기: ${redoLabel} (Ctrl+Shift+Z)` : '다시 할 것이 없습니다'} aria-label="다시 하기">
-          <Redo2 />
-        </Button>
-      </div>
+      {undo && <div className="ml-auto flex items-center gap-1"><UndoRedo /></div>}
     </div>
   );
 }

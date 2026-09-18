@@ -54,7 +54,7 @@ test('정적 페이지와 헬스 API', async ({ page, request }) => {
   }
 
   await page.goto('/tools');
-  await expect(page.getByRole('tab', { name: /GIF 일괄 변환/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /영상 GIF 변환/ }).first()).toBeVisible();
   await page.goto('/settings');
   await expect(page.locator('#techStackBox')).toBeVisible();
   await page.goto('/help');

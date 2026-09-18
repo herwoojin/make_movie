@@ -2,9 +2,7 @@ import { expect, test } from '@playwright/test';
 import { FIXTURES, importVideo, outputSeconds } from './helpers';
 
 test('프로젝트: 만들기 → 목록 → 자막 추가 → 새로고침 후 유지 → 삭제', async ({ page }) => {
-  await page.goto('/');
-  await page.locator('input[type=file]').first().setInputFiles(FIXTURES.sample);
-  await page.waitForURL(/\/editor\//, { timeout: 60_000 });
+  await importVideo(page, FIXTURES.sample);
 
   await page.getByRole('tab', { name: /자막/ }).click();
   await page.getByRole('button', { name: /재생 위치에 자막 추가/ }).click();

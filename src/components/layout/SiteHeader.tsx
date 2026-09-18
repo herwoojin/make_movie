@@ -6,13 +6,10 @@ import type { ReactNode } from 'react';
 import { LOGIN_PATH } from '@/lib/firebase/config';
 import { cn } from '@/lib/utils';
 import { AccountButton } from './AccountButton';
+import { StepNav } from './StepNav';
 
-const NAV = [
-  { href: '/projects', label: '프로젝트' },
-  { href: '/tools', label: '도구함' },
-  { href: '/settings', label: '설정' },
-  { href: '/help', label: '도움말' },
-];
+// 기능 메뉴는 좌측 사이드바에 있다. 헤더에는 어디서나 필요한 것만 둔다.
+const NAV = [{ href: '/help', label: '도움말' }];
 
 /**
  * 로그인 페이지(격리 헤더 없음)에서 앱으로 갈 때는 일반 <a>로 전체 새로고침한다.
@@ -36,7 +33,8 @@ export function SiteHeader() {
         </svg>
         <span>편집<span className="text-primary">ON</span></span>
       </NavLink>
-      <nav aria-label="주 메뉴" className="flex items-center gap-0.5 overflow-x-auto">
+      <div className="ml-auto lg:ml-4"><StepNav /></div>
+      <nav aria-label="주 메뉴" className="ml-auto flex items-center gap-0.5 overflow-x-auto">
         {NAV.map((n) => (
           <NavLink
             key={n.href}
@@ -52,9 +50,7 @@ export function SiteHeader() {
           </NavLink>
         ))}
       </nav>
-      <div className="ml-auto">
-        <AccountButton />
-      </div>
+      <AccountButton />
     </header>
   );
 }

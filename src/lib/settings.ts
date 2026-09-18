@@ -63,4 +63,7 @@ export const settings = {
   setLastPresetId: (v: string) => write('style.lastPresetId', v),
   getOnboarded: () => read('onboarded', false, isBool),
   setOnboarded: (v: boolean) => write('onboarded', v),
+  /** 스텝 표시에서 "2단계"를 누르면 방금 보던 프로젝트로 바로 가기 위해 */
+  getLastProjectId: () => read('lastProjectId', '', isString),
+  setLastProjectId: (v: string) => write('lastProjectId', v || null),
 };
