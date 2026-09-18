@@ -16,7 +16,8 @@ export function SubtitleFileMenu() {
 
   const download = (kind: 'srt' | 'vtt') => {
     const { doc, project } = useProjectStore.getState();
-    const cues = clipsToCues(doc.clips, doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
+    // 자막 파일도 화면과 같은 타이밍으로 (먼저 보여주기 포함)
+    const cues = clipsToCues(doc.clips, doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed, { leadMs: doc.view.captionLeadMs });
     const text = kind === 'srt' ? toSrt(cues) : toVtt(cues);
     downloadBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), `${project?.name ?? '자막'}.${kind}`);
   };

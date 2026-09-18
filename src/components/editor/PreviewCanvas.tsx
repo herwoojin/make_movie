@@ -7,7 +7,7 @@ import { isSourceKept, nextKeptSourceMs, sourceToOutput } from '@/lib/core/edl';
 import { player } from '@/lib/editor/player';
 import { ensureSubtitleFonts } from '@/lib/fonts';
 import { dragReframe, drawSourceFrame, previewCanvasSize } from '@/lib/render/frame';
-import { clipAtSourceMs, clipCaption } from '@/lib/subtitle/clipCues';
+import { createCaptionLookup } from '@/lib/subtitle/clipCues';
 import { renderSubtitleToCanvas } from '@/lib/subtitle/render';
 import { renderMosaicFrame } from '@/lib/vision/mosaicRender';
 import { useProjectStore } from '@/store/projectStore';
@@ -56,6 +56,8 @@ export function PreviewCanvas() {
     player.attach(video);
     void ensureSubtitleFonts();
     const ctx = canvas.getContext('2d');
+    // 편집 문서가 바뀔 때만 자막 큐를 다시 만든다 (내보내기와 같은 큐 → 같은 타이밍)
+    const captionAt = createCaptionLookup();
     let raf = 0;
 
     const tick = () => {
@@ -94,9 +96,9 @@ export function PreviewCanvas() {
 
       drawSourceFrame(ctx, stage.canvas, sw, sh, W, H, doc.view);
       if (sourceToOutput(t, doc.edl) === null) drawCutTint(ctx);
-      // 자막은 원본 시각으로 찾는다 — 시간 변환을 한 번 더 거치지 않아 미리보기와 결과가 어긋날 여지가 없다
-      const clip = clipAtSourceMs(doc.clips, t);
-      if (clip) renderSubtitleToCanvas(ctx, { text: clipCaption(clip), styleOverride: clip.styleOverride }, doc.style, W);
+      // 자막은 결과물 시각으로 찾는다 — 먼저 보여주기·배속까지 내보낸 영상과 똑같이 보인다
+      const cue = captionAt(doc, t);
+      if (cue) renderSubtitleToCanvas(ctx, cue, doc.style, W);
       else if (ui.panel === 'style') renderSubtitleToCanvas(ctx, SAMPLE_CUE, doc.style, W);
     };
     tick();

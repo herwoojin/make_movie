@@ -35,6 +35,7 @@ export function projectView(project: Project): ProjectView {
     fillMode: project.fillMode ?? DEFAULT_PROJECT_VIEW.fillMode,
     globalSpeed: project.globalSpeed ?? DEFAULT_PROJECT_VIEW.globalSpeed,
     pitchPreserve: project.pitchPreserve ?? DEFAULT_PROJECT_VIEW.pitchPreserve,
+    captionLeadMs: project.captionLeadMs ?? DEFAULT_PROJECT_VIEW.captionLeadMs,
   };
 }
 
@@ -115,6 +116,7 @@ export async function saveProjectDoc(project: Project, doc: EditorDoc, suggestio
     fillMode: doc.view.fillMode,
     globalSpeed: doc.view.globalSpeed,
     pitchPreserve: doc.view.pitchPreserve,
+    captionLeadMs: doc.view.captionLeadMs,
   };
   const oldTrackIds = await db.mosaicTracks.where('projectId').equals(project.id).primaryKeys();
   await db.transaction('rw', [db.projects, db.edlSegments, db.editClips, db.transcriptWords, db.subtitleStyles, db.mosaicTracks, db.mosaicKeyframes, db.cutSuggestions, db.history], async () => {

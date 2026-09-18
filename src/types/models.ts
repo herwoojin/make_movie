@@ -34,6 +34,8 @@ export interface Project {
   fillMode: FillMode;
   globalSpeed: number;
   pitchPreserve: boolean;
+  /** 자막을 음성보다 먼저 띄우는 시간(ms). 이전에 만든 프로젝트에는 없을 수 있다 */
+  captionLeadMs?: number;
   pipelineStage: PipelineStage;
   sourceTool: SourceTool;
 }

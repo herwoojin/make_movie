@@ -1,10 +1,32 @@
-// v2: 자막의 진실은 EditClip이다. SubtitleCue는 SRT/VTT/ASS 입출력에서만 쓰는 중간 표현.
-// 미리보기·내보내기는 "원본 시각 → 그 시각의 클립"으로 자막을 찾고(시간 변환이 끼지 않아 어긋날 일이 없다),
-// 파일로 내보낼 때만 결과물 시간으로 바꾼다.
+// v2: 자막의 진실은 EditClip이다. SubtitleCue는 자막을 "결과물 시각"에 놓은 표시용 중간 표현.
+// 미리보기·자막 넣은 영상·SRT/VTT가 모두 clipsToCues가 만든 같은 큐를 쓴다 — 그래야 "먼저 보여주기" 같은
+// 타이밍 조정이 세 곳에서 똑같이 보인다. 클립(단어 시간) 자체는 건드리지 않는다.
 import { nanoid } from 'nanoid';
 import type { EdlSegment, EditClip, SubtitleCue, TranscriptWord } from '@/types/models';
+import { clipKeptRanges, clipSpeedRanges } from '@/lib/core/clips';
 import { createTimeMap, nextKeptSourceMs, prevKeptSourceMs, type SpeedRange, type TimeMap } from '@/lib/core/edl';
-import { clipKeptRanges } from '@/lib/core/clips';
+import { activeCueAt } from './model';
+
+/** 자막을 음성보다 먼저 띄우는 시간 (ms). 0이면 끔 */
+export const CAPTION_LEAD_PRESETS = [0, 200, 300, 500] as const;
+export const MAX_CAPTION_LEAD_MS = 1000;
+
+/**
+ * 자막을 말이 시작되기 조금 전에 띄워 읽을 시간을 준다.
+ * - 앞 자막이 아직 떠 있는 동안에는 당겨오지 않는다(겹치지 않게 앞 자막 끝에서 멈춘다)
+ * - 영상 시작(0초) 앞으로는 가지 않는다
+ * - 원래 시작보다 늦어지는 일은 없다
+ */
+export function applyCaptionLead(cues: readonly SubtitleCue[], leadMs: number): SubtitleCue[] {
+  const lead = Math.min(MAX_CAPTION_LEAD_MS, Math.max(0, Math.round(Number.isFinite(leadMs) ? leadMs : 0)));
+  if (lead === 0) return [...cues];
+  let prevEnd = 0;
+  return cues.map((cue) => {
+    const startMs = Math.min(cue.startMs, Math.max(prevEnd, cue.startMs - lead, 0));
+    prevEnd = Math.max(prevEnd, cue.endMs);
+    return startMs === cue.startMs ? cue : { ...cue, startMs };
+  });
+}
 
 export type CaptionLang = 'original' | 'translated';
 
@@ -13,7 +35,7 @@ export function clipCaption(clip: EditClip, lang: CaptionLang = 'original'): str
   return clip.captionText;
 }
 
-/** 원본 시각에 보여줄 클립 (미리보기·내보내기 공용) */
+/** 원본 시각에 걸쳐 있는 클립 (목록의 "지금 재생 중" 표시용 — 자막 표시는 clipsToCues를 쓴다) */
 export function clipAtSourceMs(clips: readonly EditClip[], sourceMs: number): EditClip | undefined {
   for (const clip of clips) {
     if (!clip.enabled || !clip.captionText.trim()) continue;
@@ -22,11 +44,20 @@ export function clipAtSourceMs(clips: readonly EditClip[], sourceMs: number): Ed
   return undefined;
 }
 
-/** 클립 → 결과물 기준 자막 큐 (SRT/VTT/ASS 내보내기용) */
+export interface ClipsToCuesOptions {
+  lang?: CaptionLang;
+  map?: TimeMap;
+  /** 자막을 음성보다 먼저 띄우는 시간 (ms) */
+  leadMs?: number;
+}
+
+/** 클립 → 결과물 기준 자막 큐 (미리보기·자막 넣은 영상·SRT/VTT/ASS 공용) */
 export function clipsToCues(
   clips: readonly EditClip[], edl: readonly EdlSegment[], speeds: readonly SpeedRange[] = [], defaultSpeed = 1,
-  lang: CaptionLang = 'original', map?: TimeMap,
+  opts: ClipsToCuesOptions = {},
 ): SubtitleCue[] {
+  const lang = opts.lang ?? 'original';
+  const map = opts.map;
   const timeMap = map ?? createTimeMap(edl, speeds, defaultSpeed);
   const cues: SubtitleCue[] = [];
   const sorted = [...clips].sort((a, b) => a.sourceStartMs - b.sourceStartMs);
@@ -55,7 +86,32 @@ export function clipsToCues(
       ...(clip.styleOverride ? { styleOverride: clip.styleOverride } : {}),
     });
   });
-  return cues;
+  return applyCaptionLead(cues, opts.leadMs ?? 0);
+}
+
+export interface CaptionDoc {
+  clips: readonly EditClip[];
+  edl: readonly EdlSegment[];
+  view: { globalSpeed: number; captionLeadMs: number };
+}
+
+/**
+ * 미리보기용: 원본 시각 → 그때 화면에 보일 자막.
+ * 편집 문서가 바뀔 때만 큐를 다시 만들고(프레임마다 만들지 않는다), 내보내기와 같은 큐를 쓴다.
+ */
+export function createCaptionLookup(): (doc: CaptionDoc, sourceMs: number) => SubtitleCue | undefined {
+  let key: { clips: CaptionDoc['clips']; edl: CaptionDoc['edl']; speed: number; lead: number } | null = null;
+  let map: TimeMap | null = null;
+  let cues: SubtitleCue[] = [];
+  return (doc, sourceMs) => {
+    if (!key || key.clips !== doc.clips || key.edl !== doc.edl || key.speed !== doc.view.globalSpeed || key.lead !== doc.view.captionLeadMs) {
+      map = createTimeMap(doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
+      cues = clipsToCues(doc.clips, doc.edl, [], 1, { map, leadMs: doc.view.captionLeadMs });
+      key = { clips: doc.clips, edl: doc.edl, speed: doc.view.globalSpeed, lead: doc.view.captionLeadMs };
+    }
+    const out = map?.toOutput(sourceMs) ?? null;
+    return out === null ? undefined : activeCueAt(cues, out);
+  };
 }
 
 /** 클립이 결과물에서 차지하는 구간(자동 따라가기·타임라인 표시용) */

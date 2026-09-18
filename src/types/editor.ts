@@ -12,6 +12,8 @@ export interface ProjectView {
   globalSpeed: number;
   /** 배속을 걸어도 목소리 톤을 유지할지 */
   pitchPreserve: boolean;
+  /** 자막을 음성보다 먼저 띄우는 시간(ms). 0이면 말과 동시에 뜬다 */
+  captionLeadMs: number;
 }
 
 export const DEFAULT_PROJECT_VIEW: ProjectView = {
@@ -20,6 +22,7 @@ export const DEFAULT_PROJECT_VIEW: ProjectView = {
   fillMode: 'blur',
   globalSpeed: 1,
   pitchPreserve: true,
+  captionLeadMs: 0,
 };
 
 /**

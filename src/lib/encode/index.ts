@@ -52,7 +52,7 @@ export function buildRenderJob(asset: MediaAsset, doc: EditorDoc, opts: ExportOp
   const size = resolveOutputSize(preset, asset.width ?? 0, asset.height ?? 0, doc.view.aspectMode);
   const speeds = clipSpeedRanges(doc.clips);
   // 자막은 클립에서 만든다 (v2). 결과물 시간으로 옮겨 굽는다.
-  const cues = clipsToCues(doc.clips, doc.edl, speeds, doc.view.globalSpeed);
+  const cues = clipsToCues(doc.clips, doc.edl, speeds, doc.view.globalSpeed, { leadMs: doc.view.captionLeadMs });
   const job: RenderJob = {
     edl: doc.edl,
     speeds,

@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { addClipAtPlayhead } from '@/lib/editor/actions';
 import { useProjectStore } from '@/store/projectStore';
+import { CaptionTimingBox } from './CaptionTimingBox';
 import { SubtitleFileMenu } from './SubtitleFileMenu';
 import { TranscribeBox } from './TranscribeBox';
 
@@ -13,6 +14,7 @@ export function SubtitlePanel() {
   return (
     <>
       <TranscribeBox />
+      <CaptionTimingBox />
       <Button size="sm" variant="secondary" onClick={addClipAtPlayhead}>
         <Plus /> 재생 위치에 자막 추가
       </Button>
