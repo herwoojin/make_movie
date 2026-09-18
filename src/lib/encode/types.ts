@@ -10,6 +10,8 @@ export interface RenderOutput {
   height: number;
   fps: number;
   bitrate: number;
+  /** constant = 목표 용량을 맞춰야 할 때 (용량 줄이기). 기본은 화질 우선 */
+  bitrateMode?: 'variable' | 'constant';
   format: Extract<ExportFormat, 'mp4' | 'gif' | 'mp3' | 'wav'>;
   fit: 'contain' | 'cover';
 }

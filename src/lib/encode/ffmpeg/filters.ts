@@ -63,6 +63,8 @@ export interface FfmpegArgsOptions {
   speed?: number;
   /** 음정 유지 — atempo는 음정을 유지한다. 끄면 샘플레이트를 바꿔 톤이 함께 변한다 */
   pitchPreserve?: boolean;
+  /** constant면 CRF 대신 목표 비트레이트로 맞춘다 (용량 줄이기) */
+  bitrateMode?: 'variable' | 'constant';
   view?: FrameView;
   srcWidth?: number;
   srcHeight?: number;
@@ -118,7 +120,11 @@ export function buildFfmpegArgs(o: FfmpegArgsOptions): string[] {
   const args = ['-i', o.input, '-vf', filters.join(',')];
   if (o.hasAudio) args.push('-af', audioCut, '-c:a', 'aac', '-b:a', '128k');
   else args.push('-an');
-  return [...args, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', o.output];
+  // 목표 용량을 맞춰야 하면 화질(CRF) 대신 비트레이트를 고정한다
+  const rate = o.bitrateMode === 'constant' && o.bitrate > 0
+    ? ['-b:v', `${Math.round(o.bitrate / 1000)}k`, '-maxrate', `${Math.round((o.bitrate * 1.2) / 1000)}k`, '-bufsize', `${Math.round((o.bitrate * 2) / 1000)}k`]
+    : ['-crf', '23'];
+  return [...args, '-c:v', 'libx264', '-preset', 'ultrafast', ...rate, '-pix_fmt', 'yuv420p', '-movflags', '+faststart', o.output];
 }
 
 /** ffmpeg 로그의 time=HH:MM:SS.cc 를 ms로 */

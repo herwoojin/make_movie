@@ -218,6 +218,7 @@ async function renderOnce(job: RenderJob, source: File, onProgress: (p: Progress
       // 구운 프레임에는 비율·배속이 이미 반영돼 있다. 소리는 여기서 배속을 맞춘다
       speed,
       pitchPreserve: job.pitchPreserve ?? true,
+      bitrateMode: job.output.bitrateMode,
       view: bakedFramesPattern ? undefined : viewOf(job),
       srcWidth: job.sourceWidth,
       srcHeight: job.sourceHeight,

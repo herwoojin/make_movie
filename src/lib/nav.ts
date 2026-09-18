@@ -24,7 +24,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     items: [
       { href: '/tools/gif', label: '영상 GIF 변환', icon: Film },
-      { href: '/tools/compress', label: '영상 용량 줄이기', icon: Minimize2, planned: true },
+      { href: '/tools/compress', label: '영상 용량 줄이기', icon: Minimize2 },
       { href: '/tools/screen-gif', label: '화면녹화 GIF', icon: Monitor },
     ],
   },
@@ -33,7 +33,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: '/auto-edit', label: '1단계 · 음성 자동편집', icon: Scissors, step: 1 },
       { href: '/editor', label: '2단계 · 자막·영상 편집', icon: Subtitles, step: 2 },
-      { href: '/dub', label: '영상에 소리 입히기', icon: Music, planned: true },
+      { href: '/dub', label: '영상에 소리 입히기', icon: Music },
       { href: '/mosaic', label: '영상 얼굴 모자이크', icon: EyeOff },
     ],
   },

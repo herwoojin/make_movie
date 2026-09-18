@@ -24,12 +24,14 @@ export interface RenderResult {
   mime: string;
 }
 
-async function pickVideoConfig(width: number, height: number, bitrate: number, framerate: number): Promise<VideoEncoderConfig> {
+async function pickVideoConfig(
+  width: number, height: number, bitrate: number, framerate: number, bitrateMode: 'variable' | 'constant' = 'variable',
+): Promise<VideoEncoderConfig> {
   const level = framerate > 30 ? '2a' : '28';
   const codecs = [`avc1.6400${level}`, `avc1.4d00${level}`, `avc1.4200${level}`];
   for (const hardwareAcceleration of ['prefer-hardware', 'no-preference'] as const) {
     for (const codec of codecs) {
-      const config: VideoEncoderConfig = { codec, width, height, bitrate, framerate, hardwareAcceleration, avc: { format: 'avc' }, latencyMode: 'quality' };
+      const config: VideoEncoderConfig = { codec, width, height, bitrate, framerate, bitrateMode, hardwareAcceleration, avc: { format: 'avc' }, latencyMode: 'quality' };
       const support = await VideoEncoder.isConfigSupported(config).catch(() => null);
       if (support?.supported) return config;
     }
@@ -112,7 +114,7 @@ export async function renderWithWebCodecs(
     let muxer: Muxer<StreamTarget> | Muxer<ArrayBufferTarget> | null = null;
     let bufferTarget: ArrayBufferTarget | null = null;
     if (!isGif) {
-      const vConfig = await pickVideoConfig(W, H, job.output.bitrate, fps);
+      const vConfig = await pickVideoConfig(W, H, job.output.bitrate, fps, job.output.bitrateMode);
       if (outPath) {
         try {
           sync = await openSyncHandle(outPath);
