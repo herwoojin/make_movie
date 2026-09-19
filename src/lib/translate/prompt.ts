@@ -13,8 +13,29 @@ const BASE_RULES = [
   '너는 영상 자막 번역가다.',
   '각 줄은 화면에 잠깐 떴다 사라지는 자막이다. 한 줄이 너무 길어지지 않게 간결하게 옮겨라.',
   '줄 수를 바꾸지 마라. 입력이 N개면 출력도 정확히 N개다.',
+  '원문을 그대로 베끼지 마라. 모든 줄을 한글로 적어라. 뜻을 알 수 없는 소리나 같은 말이 되풀이되는 줄은 소리 나는 대로 한글로 짧게 적어라.',
   '설명·사과·머리말을 쓰지 마라. JSON 배열만 출력하라.',
 ].join(' ');
+
+const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const HANGUL = /\p{Script=Hangul}/u;
+const HAN = /\p{Script=Han}/u;
+const LETTER = /\p{L}/u;
+
+/**
+ * 한국어로 옮겨지지 않은 줄인지 — 모델이 원문을 베꼈거나(가나·한자만 남음), 줄이 밀려 괄호 같은 부스러기만 왔다.
+ * "OK"·"iPhone 15"처럼 원래 그대로 쓰는 짧은 외국어는 번역으로 인정한다.
+ */
+export function looksUntranslated(source: string, translated: string): boolean {
+  const t = translated.trim();
+  if (!t) return true;
+  if (KANA.test(t)) return true;
+  if (HANGUL.test(t)) return false;
+  if (HAN.test(t)) return true;
+  if (!LETTER.test(t)) return LETTER.test(source);
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  return norm(t) === norm(source) && source.trim().split(/\s+/).length >= 3;
+}
 
 export function buildTranslatePrompt(
   texts: readonly string[], opts: { sourceLang: string; tone: TranslateTone; glossary: Record<string, string> },
@@ -41,7 +62,7 @@ export function buildReviewPrompt(
     '너는 영상 자막 번역 감수자다. 아래는 이미 한 번 번역된 자막이다.',
     '앞뒤 문맥을 보고 인칭·호칭·용어·존댓말을 한 편의 영상처럼 일관되게 고쳐라.',
     TONE_PROMPTS[opts.tone],
-    '뜻이 맞는 문장은 그대로 두어도 된다. 줄 수를 바꾸지 마라.',
+    '뜻이 맞는 문장은 그대로 두어도 된다. 줄 수를 바꾸지 마라. 원문을 출력하지 말고 번역을 고친 한국어만 출력하라.',
     Object.keys(terms).length ? `용어 지정: ${formatGlossary(terms)}` : '',
     opts.contextBefore?.length ? `바로 앞 자막(참고만, 출력하지 마라): ${JSON.stringify(opts.contextBefore)}` : '',
     `입력(JSON, ${pairs.length}개):`,

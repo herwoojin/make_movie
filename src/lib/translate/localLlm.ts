@@ -2,6 +2,7 @@
 import { AppError, throwIfAborted } from '@/lib/errors';
 import { sidecar } from '@/lib/sidecar/client';
 import { applyGlossary } from './glossary';
+import { looksUntranslated } from './prompt';
 import type { TranslateAdapter, TranslateCue, TranslatedCue, TranslateOptions } from './types';
 
 export const localLlmAdapter: TranslateAdapter = {
@@ -31,11 +32,16 @@ export const localLlmAdapter: TranslateAdapter = {
       (done, total, message) => opts.onProgress?.(done, total, message),
       opts.signal,
     );
-    return result.map((r, i) => ({
-      start: cues[i]?.start ?? r.start,
-      end: cues[i]?.end ?? r.end,
-      text: cues[i]?.text ?? r.text,
-      translated: applyGlossary(r.translated?.trim() || cues[i]?.text || '', opts.glossary),
-    }));
+    return result.map((r, i) => {
+      const text = cues[i]?.text ?? r.text;
+      const translated = r.translated?.trim() ?? '';
+      return {
+        start: cues[i]?.start ?? r.start,
+        end: cues[i]?.end ?? r.end,
+        text,
+        // 한국어로 안 온 줄은 비워 둔다 — "번역 다시 시도"가 그 줄만 다시 번역한다
+        translated: looksUntranslated(text, translated) ? '' : applyGlossary(translated, opts.glossary),
+      };
+    });
   },
 };

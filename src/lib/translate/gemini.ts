@@ -5,7 +5,7 @@ import { AppError, throwIfAborted } from '@/lib/errors';
 import { settings } from '@/lib/settings';
 import { keyCandidates, maskKey } from './geminiKey';
 import { applyGlossary } from './glossary';
-import { buildReviewPrompt, buildTranslatePrompt, chunk, parseJsonArray } from './prompt';
+import { buildReviewPrompt, buildTranslatePrompt, chunk, looksUntranslated, parseJsonArray } from './prompt';
 import type { TranslateAdapter, TranslateCue, TranslatedCue, TranslateOptions } from './types';
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
@@ -348,8 +348,10 @@ export const geminiAdapter: TranslateAdapter = {
     opts.onProgress?.(0, totalSteps, '번역 서버에 보내는 중');
 
     const assign = (indexes: readonly number[], parsed: readonly string[] | null) => indexes.forEach((cueIndex, k) => {
-      // 끝내 못 받은 줄은 원문을 남긴다 — 빈 자막보다 낫다
-      out[cueIndex].translated = applyGlossary(parsed?.[k]?.trim() || cues[cueIndex].text, opts.glossary);
+      // 못 받았거나 원문을 베낀 줄은 비워 둔다 — 원어를 한국어 칸에 넣으면 번역된 줄로 보여 다시 번역하지 않는다
+      // (빈 줄은 영상·자막 파일에서 원어 자막으로 나간다)
+      const text = parsed?.[k]?.trim() ?? '';
+      out[cueIndex].translated = looksUntranslated(cues[cueIndex].text, text) ? '' : applyGlossary(text, opts.glossary);
     });
 
     /** 줄 수가 어긋나면 반으로 나눠 다시 — 번역이 다른 줄로 밀려 들어가지 않게 한다 */
@@ -375,6 +377,14 @@ export const geminiAdapter: TranslateAdapter = {
       opts.onProgress?.(step, totalSteps, stepMessage, out[indexes[indexes.length - 1]]?.translated);
     }
 
+    // 한국어로 안 온 줄만 작게 묶어 한 번 더 — 큰 묶음에서는 원문을 베끼던 모델도 몇 줄씩이면 옮긴다
+    const missing = out.flatMap((c, i) => (c.translated ? [] : [i]));
+    if (missing.length > 0) {
+      opts.onProgress?.(step, totalSteps, `번역이 안 된 ${missing.length}줄을 다시 번역하는 중`);
+      for (const indexes of chunk(missing, MIN_SPLIT)) await translateGroup(indexes);
+      opts.onRows?.(out.map((c) => ({ ...c })));
+    }
+
     if (opts.mode === 'fast') return out;
 
     // 2차: 앞뒤를 함께 보며 인칭·용어·존댓말을 맞춘다 (줄 수가 어긋나면 그 묶음은 1차 번역을 그대로 둔다)
@@ -387,8 +397,9 @@ export const geminiAdapter: TranslateAdapter = {
       const parsed = parseJsonArray(answer, pairs.length, { strict: true });
       if (parsed) {
         indexes.forEach((cueIndex, k) => {
-          const revised = parsed[k]?.trim();
-          if (revised) out[cueIndex].translated = applyGlossary(revised, opts.glossary);
+          const revised = parsed[k]?.trim() ?? '';
+          // 감수가 원문을 베끼거나 줄이 밀려 부스러기를 내면 1차 번역을 그대로 둔다
+          if (!looksUntranslated(cues[cueIndex].text, revised)) out[cueIndex].translated = applyGlossary(revised, opts.glossary);
         });
       }
       step += 1;

@@ -3,7 +3,7 @@
 import { AppError, throwIfAborted } from '@/lib/errors';
 import { settings } from '@/lib/settings';
 import { applyGlossary } from './glossary';
-import { chunk } from './prompt';
+import { chunk, looksUntranslated } from './prompt';
 import type { TranslateAdapter, TranslateCue, TranslatedCue, TranslateOptions } from './types';
 
 /** 무료 키는 :fx로 끝난다 */
@@ -70,7 +70,8 @@ export const deeplAdapter: TranslateAdapter = {
       const json = (await res.json()) as { translations?: { text?: string }[] };
       indexes.forEach((cueIndex, k) => {
         const text = json.translations?.[k]?.text?.trim() ?? '';
-        out[cueIndex].translated = applyGlossary(text || cues[cueIndex].text, opts.glossary);
+        // 한국어로 안 온 줄은 비워 둔다 — "번역 다시 시도"가 그 줄만 다시 번역한다
+        out[cueIndex].translated = looksUntranslated(cues[cueIndex].text, text) ? '' : applyGlossary(text, opts.glossary);
       });
       done += indexes.length;
       opts.onProgress?.(done, cues.length, '번역하는 중', out[indexes[indexes.length - 1]]?.translated);

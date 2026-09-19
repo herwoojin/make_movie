@@ -8,7 +8,10 @@ const CUES = [
   { start: 1000, end: 2000, text: 'ありがとう' },
 ];
 
-const OPTS: TranslateOptions = { sourceLang: 'ja', targetLang: 'ko', tone: 'literal', glossary: {}, mode: 'fast' };
+/** 가짜 번역 사전 — 가짜 서버는 "모델:한국어"로 답한다 (사전에 없는 글은 그대로) */
+const KO: Record<string, string> = { こんにちは: '안녕하세요', ありがとう: '고마워요' };
+
+const OPTS: TranslateOptions ={ sourceLang: 'ja', targetLang: 'ko', tone: 'literal', glossary: {}, mode: 'fast' };
 
 interface Call { url: string; method: string; headers: Record<string, string> }
 
@@ -39,7 +42,10 @@ function fakeGoogle(opts: {
     const items = JSON.parse(line) as (string | { 원문: string })[];
     const custom = opts.reply?.(model, items, body);
     if (custom) return custom;
-    const out = items.map((it) => `${model}:${typeof it === 'string' ? it : it.원문}`);
+    const out = items.map((it) => {
+      const text = typeof it === 'string' ? it : it.원문;
+      return `${model}:${KO[text] ?? text}`;
+    });
     return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] });
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -103,7 +109,7 @@ describe('geminiAdapter', () => {
       reply: (m) => (m === 'gemini-3.6-flash' ? googleError(404, 'models/gemini-3.6-flash is not found for API version v1beta') : undefined),
     });
     const rows = await geminiAdapter.translate(CUES, OPTS);
-    expect(rows.map((r) => r.translated)).toEqual(['gemini-2.5-flash:こんにちは', 'gemini-2.5-flash:ありがとう']);
+    expect(rows.map((r) => r.translated)).toEqual(['gemini-2.5-flash:안녕하세요', 'gemini-2.5-flash:고마워요']);
     expect(settings.getGeminiModel()).toBe('gemini-2.5-flash');
     expect(calls.filter((c) => c.method === 'POST').map((c) => /models\/([^:]+):/.exec(c.url)?.[1])).toEqual(['gemini-3.6-flash', 'gemini-2.5-flash']);
   });
@@ -111,7 +117,7 @@ describe('geminiAdapter', () => {
   it('모델 목록을 못 받아도 선호 순서대로 시도한다', async () => {
     const calls = fakeGoogle({ models: 'fail' });
     const rows = await geminiAdapter.translate(CUES, OPTS);
-    expect(rows[0].translated).toBe(`${PREFERRED_MODELS[0]}:こんにちは`);
+    expect(rows[0].translated).toBe(`${PREFERRED_MODELS[0]}:안녕하세요`);
     expect(calls.some((c) => c.url.includes(`${PREFERRED_MODELS[0]}:generateContent`))).toBe(true);
   });
 
@@ -129,7 +135,7 @@ describe('geminiAdapter', () => {
       reply: (m) => (m === 'gemini-3.6-flash' ? googleError(429, 'Quota exceeded for metric: generate_content_free_tier_requests, limit: 0') : undefined),
     });
     const rows = await geminiAdapter.translate(CUES, OPTS);
-    expect(rows[0].translated).toBe('gemini-3.1-flash-lite:こんにちは');
+    expect(rows[0].translated).toBe('gemini-3.1-flash-lite:안녕하세요');
   });
 
   it('잠깐의 과부하(503)는 같은 모델로 다시 해 본다', async () => {
@@ -139,7 +145,7 @@ describe('geminiAdapter', () => {
       reply: () => (failures-- > 0 ? googleError(503, 'The model is overloaded.', [{ retryDelay: '0s' }]) : undefined),
     });
     const rows = await geminiAdapter.translate(CUES, OPTS);
-    expect(rows[0].translated).toBe('gemini-3.6-flash:こんにちは');
+    expect(rows[0].translated).toBe('gemini-3.6-flash:안녕하세요');
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(2);
   });
 
@@ -153,7 +159,7 @@ describe('geminiAdapter', () => {
       },
     });
     const rows = await geminiAdapter.translate(CUES, OPTS);
-    expect(rows[0].translated).toBe('gemini-3.6-flash:こんにちは');
+    expect(rows[0].translated).toBe('gemini-3.6-flash:안녕하세요');
   });
 
   it('쓸 수 있는 모델이 하나도 없으면 알아듣기 쉬운 말로 알려 준다', async () => {
@@ -185,7 +191,7 @@ describe('geminiAdapter', () => {
     });
     const messages: string[] = [];
     const rows = await geminiAdapter.translate(CUES, { ...OPTS, onProgress: (_d, _t, m) => messages.push(m ?? '') });
-    expect(rows[0].translated).toBe('gemini-3.6-flash:こんにちは');
+    expect(rows[0].translated).toBe('gemini-3.6-flash:안녕하세요');
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(2);
     expect(messages.some((m) => m.includes('분당 한도'))).toBe(true);
   });
@@ -199,7 +205,7 @@ describe('geminiAdapter', () => {
     });
     const started = Date.now();
     const rows = await geminiAdapter.translate(CUES, OPTS);
-    expect(rows[0].translated).toBe('gemini-2.5-flash:こんにちは');
+    expect(rows[0].translated).toBe('gemini-2.5-flash:안녕하세요');
     expect(Date.now() - started).toBeLessThan(2000);
   });
 
@@ -210,7 +216,7 @@ describe('geminiAdapter', () => {
       models: (key) => (key === KEY_OLD ? modelList(['gemini-3.6-flash']) : googleError(400, 'API key not valid. Please pass a valid API key.', [{ reason: 'API_KEY_INVALID' }])),
     });
     const rows = await geminiAdapter.translate(CUES, OPTS);
-    expect(rows[0].translated).toBe('gemini-3.6-flash:こんにちは');
+    expect(rows[0].translated).toBe('gemini-3.6-flash:안녕하세요');
     expect(settings.getGeminiKey()).toBe(KEY_OLD);
   });
 
@@ -238,5 +244,40 @@ describe('geminiAdapter', () => {
     const rows = await geminiAdapter.translate(many, OPTS);
     expect(schemas[0]).toBe(24);
     rows.forEach((r, i) => expect(r.translated).toBe(`gemini-3.6-flash:line${i}`));
+  });
+
+  it('원문을 그대로 돌려준 줄은 한국어 칸에 넣지 않고 다시 번역하고, 끝내 안 되면 비워 둔다', async () => {
+    const noise = 'っとで、おっとで、おっとで、OKな'; // 음성 인식이 잘못 알아들은 반복
+    const echoed = new Set(['こんにちは']); // 처음 한 번만 원문을 베낀다
+    const sent: number[] = [];
+    fakeGoogle({
+      models: ['gemini-3.6-flash'],
+      reply: (m, items) => {
+        sent.push(items.length);
+        const out = items.map((it) => {
+          const text = String(it);
+          if (text === noise || echoed.delete(text)) return text;
+          return `${m}:${KO[text] ?? text}`;
+        });
+        return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] });
+      },
+    });
+    const rows = await geminiAdapter.translate([...CUES, { start: 2000, end: 3000, text: noise }], OPTS);
+    expect(rows.map((r) => r.translated)).toEqual(['gemini-3.6-flash:안녕하세요', 'gemini-3.6-flash:고마워요', '']);
+    expect(sent).toEqual([3, 2]); // 베낀 두 줄만 다시 보냈다
+  });
+
+  it('재검수가 원문을 돌려주거나 줄이 밀려 부스러기를 내면 1차 번역을 그대로 둔다', async () => {
+    fakeGoogle({
+      models: ['gemini-3.6-flash'],
+      reply: (_m, items) => {
+        if (typeof items[0] === 'string') return undefined; // 1차 번역은 정상
+        const review = items as { 원문: string }[];
+        const out = [...review.slice(1).map((it) => it.원문), '(']; // 한 줄씩 밀린 원문 + 괄호
+        return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] });
+      },
+    });
+    const rows = await geminiAdapter.translate(CUES, { ...OPTS, mode: 'precise' });
+    expect(rows.map((r) => r.translated)).toEqual(['gemini-3.6-flash:안녕하세요', 'gemini-3.6-flash:고마워요']);
   });
 });

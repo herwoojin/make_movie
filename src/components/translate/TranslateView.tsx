@@ -25,6 +25,7 @@ import { listProjects, loadProjectBundle, saveProjectDoc, saveTranscript, setPip
 import { createHistory } from '@/lib/core/undo';
 import { MODE_LABELS, TONE_LABELS, TRANSLATE_ENGINES, parseGlossary, runTranslate, type TranslateEngineId, type TranslateMode, type TranslateTone } from '@/lib/translate';
 import { prepareGemini } from '@/lib/translate/gemini';
+import { looksUntranslated } from '@/lib/translate/prompt';
 import { sttStage, type StageDef, type StageRun } from '@/lib/progress/stages';
 import { clipCaption } from '@/lib/subtitle/clipCues';
 import { cn } from '@/lib/utils';
@@ -54,8 +55,15 @@ interface Job {
   failure?: { code: string; message: string; hint?: string };
 }
 
-/** 표의 한 줄 — 번역에 보낼 원어는 화면에 보이는 원어 자막과 같다 (일본어 글자 사이 띄어쓰기는 걷어 낸다) */
-const rowOf = (c: EditClip): TranslatedCue => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: clipCaption(c, 'original'), translated: c.translatedText ?? '' });
+/**
+ * 표의 한 줄 — 번역에 보낼 원어는 화면에 보이는 원어 자막과 같다 (일본어 글자 사이 띄어쓰기는 걷어 낸다).
+ * 예전에 원어가 그대로 들어간 번역은 빈 줄로 본다 — 그래야 "이어서 번역하기"가 그 줄을 다시 번역한다.
+ */
+const rowOf = (c: EditClip): TranslatedCue => {
+  const text = clipCaption(c, 'original');
+  const translated = c.translatedText ?? '';
+  return { start: c.sourceStartMs, end: c.sourceEndMs, text, translated: looksUntranslated(text, translated) ? '' : translated };
+};
 
 /**
  * 번역이 끝나지 않은 작업 — 새로고침하거나 2단계에서 돌아와도 음성 인식을 다시 하지 않고 이어서 번역한다.
@@ -66,12 +74,9 @@ async function findUnfinished(projectId?: string): Promise<Job | null> {
   const project = projectId ? projects.find((p) => p.id === projectId) : projects.find((p) => p.sourceTool === 'translate');
   if (!project) return null;
   const clips = await getDb().editClips.where('[projectId+idx]').between([project.id, -Infinity], [project.id, Infinity]).toArray();
-  if (clips.length === 0 || clips.every((c) => c.translatedText?.trim())) return null;
-  return {
-    projectId: project.id,
-    fileName: project.name,
-    rows: clips.map(rowOf),
-  };
+  const rows = clips.map(rowOf);
+  if (rows.length === 0 || rows.every((r) => r.translated)) return null;
+  return { projectId: project.id, fileName: project.name, rows };
 }
 
 /** 표의 번역을 프로젝트 클립에 넣는다 (행 i ↔ 클립 i) */
@@ -150,8 +155,17 @@ export function TranslateView() {
 
       // 100%를 잠깐 보여 준 뒤 결과 표로 넘어간다
       setBusy((b) => (b ? { ...b, run: { stageId: 'save', ratio: 1, skipped }, done: true } : b));
-      setJob({ projectId, fileName, rows: latest });
-      useUiStore.getState().setStatus({ kind: 'done', text: `한국어 자막 ${latest.length}줄을 만들었습니다.` });
+      // 한국어로 못 옮긴 줄이 있으면 조용히 넘어가지 않고 알려 준다 (다시 시도하면 그 줄만 번역한다)
+      const missing = latest.filter((r) => !r.translated).length;
+      setJob({
+        projectId, fileName, rows: latest,
+        failure: missing > 0 ? {
+          code: 'TRANSLATE_FAILED',
+          message: `${missing}줄을 한국어로 옮기지 못했습니다.`,
+          hint: '음성 인식이 잘못 알아들은 소리(같은 말이 되풀이되는 줄 등)일 수 있습니다. “번역 다시 시도”를 누르면 그 줄만 다시 번역하고, 표에서 직접 고쳐도 됩니다.',
+        } : undefined,
+      });
+      useUiStore.getState().setStatus({ kind: 'done', text: `한국어 자막 ${latest.length - missing}/${latest.length}줄을 만들었습니다.` });
       setTimeout(() => setBusy((b) => (b?.done ? null : b)), 1500);
     } catch (e) {
       const err = toAppError(e);
