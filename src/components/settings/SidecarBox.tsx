@@ -2,7 +2,7 @@
 
 // 내 컴퓨터 도우미(사이드카) 연결. 없어도 앱은 그대로 동작하므로 "선택"이라는 점을 분명히 한다.
 import { Check, Copy, Plug, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/ui/field';
 import { Input, Label } from '@/components/ui/misc';
@@ -10,6 +10,7 @@ import { SIDECAR_ORIGIN } from '@/lib/sidecar/client';
 import { useSidecar } from '@/lib/sidecar/useSidecar';
 import { settings } from '@/lib/settings';
 import { cn } from '@/lib/utils';
+import { LocalNetworkHint } from './LocalNetworkHint';
 
 const FEATURE_LABELS: Record<string, string> = {
   ytdlp: '유튜브 영상 받기',
@@ -35,6 +36,8 @@ export function SidecarBox() {
     }
   };
   useEffect(() => setToken(settings.getSidecarToken()), []);
+  // 권한이 허용으로 바뀌면 부르는 함수 — 매 렌더마다 새로 만들면 권한 구독이 계속 다시 걸린다
+  const onGranted = useCallback(() => recheck(), [recheck]);
 
   return (
     <Section
@@ -46,6 +49,7 @@ export function SidecarBox() {
         {status === 'connected' ? `연결됨 · ${health?.version ?? ''}` : status === 'checking' ? '확인 중…' : '연결되지 않음 (웹 전용 모드)'}
         <Button size="sm" variant="ghost" onClick={recheck}><RefreshCw /> 다시 확인</Button>
       </p>
+      {status !== 'connected' && <LocalNetworkHint onGranted={onGranted} />}
 
       {status === 'connected' && (
         <ul className="flex flex-wrap gap-1.5 text-xs">
@@ -82,8 +86,8 @@ export function SidecarBox() {
           <li>“다시 확인”을 누르면 연결됩니다. 터미널 창은 쓰는 동안 켜 두세요.</li>
         </ol>
         <p className="text-muted-foreground">
-          배포한 사이트(https)에서 쓸 때는 주소를 허용해 줘야 합니다:{' '}
-          <code className="rounded bg-muted px-1">EDITON_ORIGINS=https://내사이트.netlify.app npm run helper</code>
+          이 컴퓨터(localhost)와 배포 주소 1u2v.netlify.app은 기본으로 연결을 허용합니다. 다른 주소에서 쓰려면{' '}
+          <code className="rounded bg-muted px-1">EDITON_ORIGINS=https://다른주소 npm run helper</code>
         </p>
       </div>
     </Section>

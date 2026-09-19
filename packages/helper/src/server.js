@@ -16,8 +16,9 @@ export const HOST = '127.0.0.1';
 export const PORT = 47_600;
 export const VERSION = '1.0.0';
 
-/** 로컬 개발 주소와 배포 도메인만 허용한다 */
-export const DEFAULT_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3100'];
+/** 로컬 개발 주소와 배포 도메인만 허용한다. 다른 주소는 EDITON_ORIGINS로 더한다 */
+export const DEPLOYED_ORIGIN = 'https://1u2v.netlify.app';
+export const DEFAULT_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3100', DEPLOYED_ORIGIN];
 
 export function allowedOrigins(extra = process.env.EDITON_ORIGINS) {
   const fromEnv = (extra ?? '').split(',').map((s) => s.trim()).filter(Boolean);

@@ -36,8 +36,10 @@ describe('바인딩·출처', () => {
     expect(HOST).toBe('127.0.0.1');
     expect(PORT).toBe(47_600);
   });
-  it('허용 출처는 로컬과 환경변수로 준 도메인뿐', () => {
+  it('허용 출처는 로컬·배포 주소와 환경변수로 준 도메인뿐', () => {
     expect(allowedOrigins('')).toEqual(DEFAULT_ORIGINS);
+    expect(DEFAULT_ORIGINS).toContain('https://1u2v.netlify.app');
+    expect(DEFAULT_ORIGINS.some((o) => o.includes('*'))).toBe(false);
     expect(allowedOrigins('https://editon.example')).toContain('https://editon.example');
     expect(allowedOrigins('')).not.toContain('*');
   });

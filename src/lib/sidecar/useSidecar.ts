@@ -14,6 +14,9 @@ export interface SidecarState {
 
 const NO_FEATURES: SidecarFeatures = { ytdlp: false, ffmpeg: false, translate: false, tts: false };
 
+/** 렌더마다 새 함수가 되지 않도록 밖에 둔다 (구독·effect 의존성으로 쓰인다) */
+const recheck = () => { void sidecar.check(true); };
+
 export function useSidecar(): SidecarState {
   const live = useSyncExternalStore(
     (cb) => sidecar.subscribe(cb),
@@ -35,6 +38,6 @@ export function useSidecar(): SidecarState {
     health: status === 'connected' ? sidecar.health : null,
     features: status === 'connected' ? sidecar.features() : NO_FEATURES,
     ready: status === 'connected',
-    recheck: () => { void sidecar.check(true); },
+    recheck,
   };
 }

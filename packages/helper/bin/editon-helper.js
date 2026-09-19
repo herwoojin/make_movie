@@ -25,7 +25,7 @@ try {
   console.log(`  저장 폴더: ${defaultOutDir()}`);
   console.log(`  연결을 허용한 사이트: ${allowedOrigins().join(', ')}`);
   if (!process.env.EDITON_ORIGINS) {
-    console.log('  (배포한 사이트에서 쓰려면: EDITON_ORIGINS=https://내사이트.netlify.app npm run helper)');
+    console.log('  (다른 주소에서 쓰려면: EDITON_ORIGINS=https://다른주소 npm run helper)');
   }
   console.log('  끄려면 Ctrl+C.');
   console.log('');

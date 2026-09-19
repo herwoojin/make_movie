@@ -22,7 +22,7 @@ npm run helper
 ```
 
 > `npx editon-helper`는 npm에 배포한 뒤에 쓸 수 있습니다. 아직 배포 전이라 지금은 위 명령을 씁니다.
-> 배포한 사이트(https)에서 쓸 때는 주소를 허용해 주세요: `EDITON_ORIGINS=https://내사이트.netlify.app npm run helper`
+> 배포 주소 `https://1u2v.netlify.app`은 기본으로 허용돼 있습니다. 다른 주소를 더 쓰려면: `EDITON_ORIGINS=https://다른주소 npm run helper`
 
 처음 실행하면 토큰을 만들어 보여 주고 `~/.editon/token`(권한 600)에 저장합니다.
 웹앱 → **설정 → 내 컴퓨터 도우미**에 그 토큰을 붙여넣으면 연결됩니다.
@@ -31,7 +31,7 @@ npm run helper
 
 - **`127.0.0.1:47600` 에만 바인딩합니다.** 다른 기기에서는 접속할 수 없습니다. (`0.0.0.0` 바인딩 없음)
 - 모든 요청에 `Authorization: Bearer <토큰>` 이 필요합니다. 없으면 401입니다.
-- CORS는 `http://localhost:3000` 과 `EDITON_ORIGINS` 로 지정한 배포 도메인만 허용합니다.
+- CORS는 `http://localhost:3000`, 배포 주소 `https://1u2v.netlify.app`, 그리고 `EDITON_ORIGINS`로 지정한 도메인만 허용합니다.
 - 영상·오디오 파일은 이 컴퓨터 안에서만 오갑니다.
 
 ## 환경 변수
