@@ -26,8 +26,10 @@ import { createHistory } from '@/lib/core/undo';
 import { MODE_LABELS, TONE_LABELS, TRANSLATE_ENGINES, parseGlossary, runTranslate, type TranslateEngineId, type TranslateMode, type TranslateTone } from '@/lib/translate';
 import { prepareGemini } from '@/lib/translate/gemini';
 import { sttStage, type StageDef, type StageRun } from '@/lib/progress/stages';
+import { clipCaption } from '@/lib/subtitle/clipCues';
 import { cn } from '@/lib/utils';
 import type { Progress as WorkerProgress } from '@/lib/worker/protocol';
+import type { EditClip } from '@/types/models';
 import { useUiStore } from '@/store/uiStore';
 
 const LANGS: [string, string][] = [['auto', '자동 감지'], ['en', '영어'], ['ja', '일본어'], ['zh', '중국어'], ['ko', '한국어']];
@@ -52,16 +54,23 @@ interface Job {
   failure?: { code: string; message: string; hint?: string };
 }
 
-/** 번역이 끝나지 않은 가장 최근 작업 — 새로고침해도 음성 인식을 다시 하지 않고 이어서 번역한다 */
-async function findUnfinished(): Promise<Job | null> {
-  const project = (await listProjects()).find((p) => p.sourceTool === 'translate' && p.pipelineStage === 1);
+/** 표의 한 줄 — 번역에 보낼 원어는 화면에 보이는 원어 자막과 같다 (일본어 글자 사이 띄어쓰기는 걷어 낸다) */
+const rowOf = (c: EditClip): TranslatedCue => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: clipCaption(c, 'original'), translated: c.translatedText ?? '' });
+
+/**
+ * 번역이 끝나지 않은 작업 — 새로고침하거나 2단계에서 돌아와도 음성 인식을 다시 하지 않고 이어서 번역한다.
+ * projectId가 없으면 번역 화면에서 만든 가장 최근 프로젝트를 본다.
+ */
+async function findUnfinished(projectId?: string): Promise<Job | null> {
+  const projects = await listProjects();
+  const project = projectId ? projects.find((p) => p.id === projectId) : projects.find((p) => p.sourceTool === 'translate');
   if (!project) return null;
   const clips = await getDb().editClips.where('[projectId+idx]').between([project.id, -Infinity], [project.id, Infinity]).toArray();
   if (clips.length === 0 || clips.every((c) => c.translatedText?.trim())) return null;
   return {
     projectId: project.id,
     fileName: project.name,
-    rows: clips.map((c) => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: c.captionTextOriginal, translated: c.translatedText ?? '' })),
+    rows: clips.map(rowOf),
   };
 }
 
@@ -94,7 +103,9 @@ export function TranslateView() {
     setEngine(settings.getTranslateEngine());
     setGlossaryText(settings.getGlossaryText());
     let alive = true;
-    void findUnfinished().then((r) => { if (alive) setResume(r); }).catch(() => undefined);
+    // 편집 화면의 "이어서 번역하기"는 ?project=로 어느 프로젝트인지 알려 준다
+    const fromEditor = new URLSearchParams(window.location.search).get('project') ?? undefined;
+    void findUnfinished(fromEditor).then((r) => { if (alive) setResume(r); }).catch(() => undefined);
     return () => { alive = false; };
   }, []);
 
@@ -210,7 +221,7 @@ export function TranslateView() {
       const clips = renumberClips(built.clips);
       await saveProjectDoc(bundle.project, { ...bundle.doc, clips, words: built.words }, [], createHistory());
       await getDb().transcripts.update(transcript.id, { language: stt.language });
-      base = clips.map((c) => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: c.captionTextOriginal, translated: '' }));
+      base = clips.map(rowOf);
     } catch (e) {
       useUiStore.getState().showError(toAppError(e));
       setBusy(null);

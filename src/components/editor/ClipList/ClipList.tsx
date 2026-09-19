@@ -36,6 +36,8 @@ export function ClipList() {
   const selectedIds = useTimelineStore((s) => s.selectedClipIds);
   const autoFollow = useUiStore((s) => s.autoFollow);
   const showDeleted = useUiStore((s) => s.showDeletedWords);
+  // 번역으로 만든 프로젝트(또는 번역이 하나라도 있는 프로젝트)면 한국어 줄을 함께 보여 준다
+  const captionLang = useProjectStore((s) => (s.project?.sourceTool === 'translate' || s.doc.clips.some((c) => c.translatedText?.trim()) ? s.doc.view.captionLang : null));
   const activeClipId = useTimelineStore((s) => clipAtSource(useProjectStore.getState().doc.clips, s.currentMs)?.id ?? null);
 
   const parentRef = useRef<HTMLDivElement>(null);
@@ -76,6 +78,7 @@ export function ClipList() {
     onSeek: (ms) => { player.pause(); player.seek(ms); useTimelineStore.getState().setCurrentMs(ms); },
     onCaption: (id, text) => store().setCaption(id, text),
     onResetCaption: (id) => store().resetCaption(id),
+    onTranslation: (id, text) => store().setTranslation(id, text),
   }), [store]);
 
   const pauseFollow = useCallback(() => { pausedUntil.current = Date.now() + FOLLOW_RESUME_MS; }, []);
@@ -115,6 +118,7 @@ export function ClipList() {
                 selected={selected.has(clip.id)}
                 active={activeClipId === clip.id}
                 showDeleted={showDeleted}
+                captionLang={captionLang}
                 {...handlers}
               />
             </div>

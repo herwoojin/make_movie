@@ -73,6 +73,8 @@ export async function createProjectFromFile(
     id: projectId, name: file.name.replace(/\.[^.]+$/, ''), durationMs: probe.durationMs, sourceDurationMs: probe.durationMs,
     width: probe.width, height: probe.height, fps: probe.fps, status: 'draft', createdAt: now, updatedAt: now, schemaVersion: SCHEMA_VERSION,
     ...DEFAULT_PROJECT_VIEW, pipelineStage: opts.pipelineStage ?? 1, sourceTool: opts.sourceTool ?? 'import',
+    // 해외 영상 한국어 자막으로 만든 프로젝트는 처음부터 한국어 자막을 보여 준다
+    captionLang: opts.sourceTool === 'translate' ? 'translated' : 'original',
   };
   const asset: MediaAsset = {
     id: assetId, projectId, kind: 'video', fileName: file.name, fileSize: file.size, mimeType: file.type || `video/${ext}`,

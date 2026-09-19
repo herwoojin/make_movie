@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { addClipAtPlayhead } from '@/lib/editor/actions';
 import { useProjectStore } from '@/store/projectStore';
+import { CaptionLangBox } from './CaptionLangBox';
 import { CaptionTimingBox } from './CaptionTimingBox';
 import { SubtitleFileMenu } from './SubtitleFileMenu';
 import { TranscribeBox } from './TranscribeBox';
@@ -13,6 +14,7 @@ export function SubtitlePanel() {
   const wordCount = useProjectStore((s) => s.doc.words.filter((w) => !w.deleted).length);
   return (
     <>
+      <CaptionLangBox />
       <TranscribeBox />
       <CaptionTimingBox />
       <Button size="sm" variant="secondary" onClick={addClipAtPlayhead}>

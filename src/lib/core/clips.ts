@@ -84,9 +84,27 @@ export function clipWords(words: readonly TranscriptWord[], clipId: string): Tra
   return words.filter((w) => w.clipId === clipId).sort((a, b) => a.startMs - b.startMs || a.idx - b.idx);
 }
 
+/** 띄어쓰기를 하지 않는 글자 (일본어 가나·한자·전각 문장부호). 한글은 띄어 쓰므로 들어가지 않는다 */
+const NO_SPACE_SCRIPT = /[\u3000-\u303F\u3040-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;
+
+/** 단어를 이어 자막 줄로. 일본어·중국어는 단어 사이를 띄우지 않는다 ("ミ ン ク" → "ミンク") */
+export function joinWords(parts: readonly string[]): string {
+  let out = '';
+  for (const part of parts) {
+    if (!out) out = part;
+    else out += NO_SPACE_SCRIPT.test(out[out.length - 1]) || NO_SPACE_SCRIPT.test(part[0]) ? part : ` ${part}`;
+  }
+  return out;
+}
+
+/** 이미 띄어 써 버린 일본어·중국어 자막에서 글자 사이 띄어쓰기를 걷어 낸다 */
+export function tightenCjk(text: string): string {
+  return joinWords(text.split(/\s+/).filter(Boolean));
+}
+
 /** 남아 있는 단어로 자막 줄을 다시 만든다 */
 export function captionFromWords(words: readonly TranscriptWord[]): string {
-  return words.filter((w) => !w.deleted).map((w) => w.text.trim()).filter(Boolean).join(' ');
+  return joinWords(words.filter((w) => !w.deleted).map((w) => w.text.trim()).filter(Boolean));
 }
 
 /** 지워진 단어들의 잘라낼 구간. 앞뒤 30ms 여백, 150ms 미만 간격은 하나로 병합 */
@@ -196,6 +214,12 @@ export function setClipEnabled(state: ClipState, clipId: string, enabled: boolea
 /** 자막 줄을 사용자가 직접 고침 (영상은 자르지 않는다) */
 export function setCaptionText(state: ClipState, clipId: string, text: string): ClipState {
   const clips = state.clips.map((c) => (c.id === clipId ? { ...c, captionText: text, captionEdited: text !== c.captionTextOriginal } : c));
+  return { ...state, clips };
+}
+
+/** 번역 자막(한국어)을 사용자가 직접 고침 */
+export function setTranslatedText(state: ClipState, clipId: string, text: string): ClipState {
+  const clips = state.clips.map((c) => (c.id === clipId ? { ...c, translatedText: text } : c));
   return { ...state, clips };
 }
 

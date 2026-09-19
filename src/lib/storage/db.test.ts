@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { EditClip, Project } from '@/types/models';
 import { DEFAULT_PROJECT_VIEW } from '@/types/editor';
 import { deleteProjectRecords, EditOnDB } from './db';
+import { projectView } from './projectRepo';
 
 const project = (id: string, updatedAt: number): Project => ({
   id, name: id, durationMs: 1000, sourceDurationMs: 1000, width: 640, height: 360, fps: 30,
@@ -97,5 +98,14 @@ describe('EditOnDB', () => {
     expect((await db.projects.get('p'))?.aspectMode).toBe('original');
     expect((await db.subtitleStyles.get('style-p'))?.outlineEnabled).toBe(true);
     expect((await db.transcriptWords.get('w1'))?.deleted).toBe(false);
+  });
+});
+
+describe('projectView 자막 언어', () => {
+  it('해외 영상 한국어 자막으로 만든 프로젝트는 처음부터 한국어로 보여 준다', () => {
+    const { captionLang: _omit, ...base } = project('t', 0);
+    expect(projectView({ ...base, sourceTool: 'translate' }).captionLang).toBe('translated');
+    expect(projectView(base).captionLang).toBe('original');
+    expect(projectView({ ...base, sourceTool: 'translate', captionLang: 'original' }).captionLang).toBe('original');
   });
 });

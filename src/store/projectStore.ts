@@ -6,7 +6,7 @@ import type { CutSuggestion, EditClip, MediaAsset, Project, StyleValues, Transcr
 import { DEFAULT_PROJECT_VIEW, type EditorDoc, type ProjectView } from '@/types/editor';
 import {
   applyWordCuts, buildClipsFromWords, clipSpeedRanges, deleteWord as deleteWordPure, renumberClips, resetCaption as resetCaptionPure,
-  restoreWord as restoreWordPure, restoreWordCut, setCaptionText as setCaptionPure, setClipEnabled as setClipEnabledPure, type ClipState,
+  restoreWord as restoreWordPure, restoreWordCut, setCaptionText as setCaptionPure, setClipEnabled as setClipEnabledPure, setTranslatedText, type ClipState,
 } from '@/lib/core/clips';
 import { applySuggestions, createTimeMap, normalizeSpeed, restoreRange, type SpeedRange, type TimeMap } from '@/lib/core/edl';
 import { commit, createHistory, redo as redoPatch, undo as undoPatch, UNDO_LIMIT, type UndoHistory } from '@/lib/core/undo';
@@ -58,6 +58,7 @@ interface ProjectState {
   removeClips: (clipIds: string[]) => void;
   setCaption: (clipId: string, text: string) => void;
   resetCaption: (clipId: string) => void;
+  setTranslation: (clipId: string, text: string) => void;
   setClipSpeed: (clipIds: string[] | 'all', speed: number) => void;
   setClipStyle: (clipIds: string[] | 'all', patch: Partial<StyleValues>) => void;
   setView: (patch: Partial<ProjectView>) => void;
@@ -265,6 +266,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     get().edit('자막 자동 생성으로 되돌리기', (d) => {
       const next = resetCaptionPure({ clips: d.clips, words: d.words }, clipId);
       d.clips = next.clips;
+    });
+  },
+
+  setTranslation: (clipId, text) => {
+    get().edit('한국어 자막 수정', (d) => {
+      d.clips = setTranslatedText({ clips: d.clips, words: d.words }, clipId, text).clips;
     });
   },
 

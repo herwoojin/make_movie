@@ -22,6 +22,9 @@ describe('clipAtSourceMs', () => {
     expect(clipCaption(c)).toBe('원어');
     expect(clipCaption(c, 'translated')).toBe('한국어');
     expect(clipCaption(clip('b', 0, 1, '원어'), 'translated')).toBe('원어');
+    // 예전에 글자마다 띄어 쓴 일본어 자막도 붙여서 보여 준다. 직접 고친 자막은 그대로
+    expect(clipCaption(clip('c', 0, 1, 'ミ ン ク シ ャ ール です。'))).toBe('ミンクシャールです。');
+    expect(clipCaption(clip('d', 0, 1, 'ミ ン ク', { captionEdited: true }))).toBe('ミ ン ク');
   });
 });
 
@@ -133,6 +136,13 @@ describe('createCaptionLookup (미리보기)', () => {
     const on = createCaptionLookup();
     expect(on(doc(300), 1800)?.text).toBe('안녕');
     expect(on(doc(300), 1600)).toBeUndefined();
+  });
+
+  it('자막 언어를 한국어로 고르면 미리보기에 번역이 보이고, 바꾸면 바로 원어로 바뀐다', () => {
+    const lookup = createCaptionLookup();
+    const translated = { ...doc(0), clips: [clip('a', 2000, 3000, 'こんにちは', { translatedText: '안녕하세요' })] };
+    expect(lookup({ ...translated, view: { ...translated.view, captionLang: 'translated' as const } }, 2500)?.text).toBe('안녕하세요');
+    expect(lookup({ ...translated, view: { ...translated.view, captionLang: 'original' as const } }, 2500)?.text).toBe('こんにちは');
   });
 
   it('잘려 나간 구간에서는 자막을 보여주지 않는다 (결과물 기준)', () => {

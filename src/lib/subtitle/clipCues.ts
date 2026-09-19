@@ -2,8 +2,8 @@
 // 미리보기·자막 넣은 영상·SRT/VTT가 모두 clipsToCues가 만든 같은 큐를 쓴다 — 그래야 "먼저 보여주기" 같은
 // 타이밍 조정이 세 곳에서 똑같이 보인다. 클립(단어 시간) 자체는 건드리지 않는다.
 import { nanoid } from 'nanoid';
-import type { EdlSegment, EditClip, SubtitleCue, TranscriptWord } from '@/types/models';
-import { clipKeptRanges, clipSpeedRanges } from '@/lib/core/clips';
+import type { CaptionLang, EdlSegment, EditClip, SubtitleCue, TranscriptWord } from '@/types/models';
+import { clipKeptRanges, clipSpeedRanges, tightenCjk } from '@/lib/core/clips';
 import { createTimeMap, nextKeptSourceMs, prevKeptSourceMs, type SpeedRange, type TimeMap } from '@/lib/core/edl';
 import { activeCueAt } from './model';
 
@@ -28,11 +28,13 @@ export function applyCaptionLead(cues: readonly SubtitleCue[], leadMs: number): 
   });
 }
 
-export type CaptionLang = 'original' | 'translated';
+export type { CaptionLang };
 
+/** 화면·파일에 나갈 자막 글자. 번역을 고르면 번역이 없는 줄만 원어로 나간다 */
 export function clipCaption(clip: EditClip, lang: CaptionLang = 'original'): string {
   if (lang === 'translated' && clip.translatedText?.trim()) return clip.translatedText;
-  return clip.captionText;
+  // 예전에 일본어·중국어 글자 사이에 띄어쓰기를 넣어 만든 자막도 붙여서 보여 준다 (직접 고친 자막은 그대로)
+  return clip.captionEdited ? clip.captionText : tightenCjk(clip.captionText);
 }
 
 /** 원본 시각에 걸쳐 있는 클립 (목록의 "지금 재생 중" 표시용 — 자막 표시는 clipsToCues를 쓴다) */
@@ -92,7 +94,7 @@ export function clipsToCues(
 export interface CaptionDoc {
   clips: readonly EditClip[];
   edl: readonly EdlSegment[];
-  view: { globalSpeed: number; captionLeadMs: number };
+  view: { globalSpeed: number; captionLeadMs: number; captionLang?: CaptionLang };
 }
 
 /**
@@ -100,14 +102,15 @@ export interface CaptionDoc {
  * 편집 문서가 바뀔 때만 큐를 다시 만들고(프레임마다 만들지 않는다), 내보내기와 같은 큐를 쓴다.
  */
 export function createCaptionLookup(): (doc: CaptionDoc, sourceMs: number) => SubtitleCue | undefined {
-  let key: { clips: CaptionDoc['clips']; edl: CaptionDoc['edl']; speed: number; lead: number } | null = null;
+  let key: { clips: CaptionDoc['clips']; edl: CaptionDoc['edl']; speed: number; lead: number; lang: CaptionLang } | null = null;
   let map: TimeMap | null = null;
   let cues: SubtitleCue[] = [];
   return (doc, sourceMs) => {
-    if (!key || key.clips !== doc.clips || key.edl !== doc.edl || key.speed !== doc.view.globalSpeed || key.lead !== doc.view.captionLeadMs) {
+    const lang = doc.view.captionLang ?? 'original';
+    if (!key || key.clips !== doc.clips || key.edl !== doc.edl || key.speed !== doc.view.globalSpeed || key.lead !== doc.view.captionLeadMs || key.lang !== lang) {
       map = createTimeMap(doc.edl, clipSpeedRanges(doc.clips), doc.view.globalSpeed);
-      cues = clipsToCues(doc.clips, doc.edl, [], 1, { map, leadMs: doc.view.captionLeadMs });
-      key = { clips: doc.clips, edl: doc.edl, speed: doc.view.globalSpeed, lead: doc.view.captionLeadMs };
+      cues = clipsToCues(doc.clips, doc.edl, [], 1, { map, leadMs: doc.view.captionLeadMs, lang });
+      key = { clips: doc.clips, edl: doc.edl, speed: doc.view.globalSpeed, lead: doc.view.captionLeadMs, lang };
     }
     const out = map?.toOutput(sourceMs) ?? null;
     return out === null ? undefined : activeCueAt(cues, out);

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { collectErrors, FIXTURES } from './helpers';
+import { collectErrors, FIXTURES, openPanel } from './helpers';
 
 /**
  * 구글 번역 서버 흉내. 모델 목록(GET)과 번역(POST)을 대신 답한다.
@@ -174,9 +175,32 @@ test('번역 화면: 번역이 실패해도 원어 자막은 남고 "번역 다�
   expect(await page.evaluate(() => localStorage.getItem('editon.translate.geminiModel'))).toBe(JSON.stringify('gemini-2.5-flash'));
   expect(google.keyInUrl).toBe(false);
 
-  // 2단계로 넘기면 번역이 그대로 따라간다
+  // 2단계로 넘기면 번역이 그대로 따라가고, 처음부터 한국어가 화면·자막 파일에 나간다
   await page.getByRole('button', { name: /2단계 자막·영상 편집/ }).first().click();
   await expect(page).toHaveURL(/\/editor\//);
+  const korean = page.getByRole('textbox', { name: '한국어 자막' }).first();
+  await expect(korean).toHaveValue(/번역됨: /, { timeout: 30_000 });
+
+  await openPanel(page, '자막');
+  await expect(page.getByRole('radio', { name: '한국어 (번역)' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByText(/번역된 줄 (\d+)\/\1줄/)).toBeVisible();
+  const srt = async () => {
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: /SRT 받기/ }).click();
+    return readFileSync(await (await downloading).path(), 'utf8');
+  };
+  expect(await srt()).toContain('번역됨: ');
+
+  // 한국어 줄을 고치면 자막 파일에도 그대로
+  await korean.fill('직접 고친 한국어');
+  await korean.press('Enter');
+  expect(await srt()).toContain('직접 고친 한국어');
+
+  // 원어로 바꾸면 원어가 나간다
+  await page.getByRole('radio', { name: '원어' }).click();
+  const original = await srt();
+  expect(original).not.toContain('번역됨: ');
+  expect(original).not.toContain('직접 고친 한국어');
   expect(errors).toEqual([]);
 });
 

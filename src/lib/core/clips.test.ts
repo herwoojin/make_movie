@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EditClip, TranscriptWord } from '@/types/models';
 import {
+  joinWords, tightenCjk,
   applyWordCuts, buildClipsFromWords, captionFromWords, clipAtSource, clipKeptRanges, clipSpeedRanges, clipToEdlSegments,
   clipWords, deleteWord, recalcClipDuration, renumberClips, resetCaption, restoreWord, restoreWordCut, setCaptionText,
   setClipEnabled, wordCutRanges, type ClipState,
@@ -197,5 +198,25 @@ describe('보조 함수', () => {
     expect(clipAtSource(state.clips, 5000)).toBeUndefined();
     const shuffled: EditClip[] = [{ ...state.clips[0], idx: 7 }];
     expect(renumberClips(shuffled)[0].idx).toBe(0);
+  });
+});
+
+describe('joinWords / tightenCjk (일본어·중국어 띄어쓰기)', () => {
+  it('일본어·중국어는 단어 사이를 띄우지 않는다', () => {
+    expect(joinWords(['ミ', 'ン', 'ク', 'シ', 'ャ', 'ール', 'です。'])).toBe('ミンクシャールです。');
+    expect(joinWords(['激', 'しい', 'の', 'を'])).toBe('激しいのを');
+    expect(joinWords(['我', '爱', '你'])).toBe('我爱你');
+  });
+  it('한국어·영어는 그대로 띄운다', () => {
+    expect(joinWords(['안녕하세요', '여러분'])).toBe('안녕하세요 여러분');
+    expect(joinWords(['Hello', 'world'])).toBe('Hello world');
+  });
+  it('일본어 사이의 영어 단어는 붙인다', () => {
+    expect(joinWords(['iPhone', 'です'])).toBe('iPhoneです');
+    expect(joinWords(['これ', 'は', 'iPhone', 'と', 'Mac'])).toBe('これはiPhoneとMac');
+  });
+  it('이미 띄어 써 버린 자막도 되돌린다', () => {
+    expect(tightenCjk('ミ ン ク シ ャ ール です。')).toBe('ミンクシャールです。');
+    expect(tightenCjk('안녕 하세요')).toBe('안녕 하세요');
   });
 });

@@ -16,6 +16,9 @@ export interface ReframeBox {
 export type PipelineStage = 1 | 2;
 export type SourceTool = 'auto-edit' | 'translate' | 'import' | 'dub' | 'mosaic';
 
+/** 자막 언어 — 원어(음성 인식 그대로) 또는 번역(translatedText) */
+export type CaptionLang = 'original' | 'translated';
+
 export interface Project {
   id: string;
   name: string;
@@ -36,6 +39,8 @@ export interface Project {
   pitchPreserve: boolean;
   /** 자막을 음성보다 먼저 띄우는 시간(ms). 이전에 만든 프로젝트에는 없을 수 있다 */
   captionLeadMs?: number;
+  /** 화면·파일에 내보낼 자막 언어. 없으면 번역으로 만든 프로젝트는 'translated' */
+  captionLang?: CaptionLang;
   pipelineStage: PipelineStage;
   sourceTool: SourceTool;
 }

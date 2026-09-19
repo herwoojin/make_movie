@@ -1,5 +1,5 @@
 import type { MosaicTrackDoc } from '@/lib/vision/mosaicRender';
-import type { AspectMode, EdlSegment, EditClip, FillMode, ReframeBox, SubtitleCue, SubtitleStyle, TranscriptWord } from './models';
+import type { AspectMode, CaptionLang, EdlSegment, EditClip, FillMode, ReframeBox, SubtitleCue, SubtitleStyle, TranscriptWord } from './models';
 
 export type { MosaicTrackDoc };
 
@@ -14,6 +14,8 @@ export interface ProjectView {
   pitchPreserve: boolean;
   /** 자막을 음성보다 먼저 띄우는 시간(ms). 0이면 말과 동시에 뜬다 */
   captionLeadMs: number;
+  /** 화면·파일에 내보낼 자막 언어. 번역이 없는 줄은 원어로 나간다 */
+  captionLang: CaptionLang;
 }
 
 export const DEFAULT_PROJECT_VIEW: ProjectView = {
@@ -23,6 +25,7 @@ export const DEFAULT_PROJECT_VIEW: ProjectView = {
   globalSpeed: 1,
   pitchPreserve: true,
   captionLeadMs: 0,
+  captionLang: 'original',
 };
 
 /**

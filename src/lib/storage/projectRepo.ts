@@ -36,6 +36,8 @@ export function projectView(project: Project): ProjectView {
     globalSpeed: project.globalSpeed ?? DEFAULT_PROJECT_VIEW.globalSpeed,
     pitchPreserve: project.pitchPreserve ?? DEFAULT_PROJECT_VIEW.pitchPreserve,
     captionLeadMs: project.captionLeadMs ?? DEFAULT_PROJECT_VIEW.captionLeadMs,
+    // 해외 영상 한국어 자막(1단계)으로 만든 프로젝트는 처음부터 한국어로 보여 준다
+    captionLang: project.captionLang ?? (project.sourceTool === 'translate' ? 'translated' : DEFAULT_PROJECT_VIEW.captionLang),
   };
 }
 
@@ -117,6 +119,7 @@ export async function saveProjectDoc(project: Project, doc: EditorDoc, suggestio
     globalSpeed: doc.view.globalSpeed,
     pitchPreserve: doc.view.pitchPreserve,
     captionLeadMs: doc.view.captionLeadMs,
+    captionLang: doc.view.captionLang,
   };
   const oldTrackIds = await db.mosaicTracks.where('projectId').equals(project.id).primaryKeys();
   await db.transaction('rw', [db.projects, db.edlSegments, db.editClips, db.transcriptWords, db.subtitleStyles, db.mosaicTracks, db.mosaicKeyframes, db.cutSuggestions, db.history], async () => {
@@ -263,7 +266,8 @@ export function parseProjectFile(json: unknown): EditonProjectFile {
     version: 2,
     clips: Array.isArray(f.clips) ? f.clips : [],
     words: Array.isArray(f.words) ? f.words : [],
-    view: f.view ?? DEFAULT_PROJECT_VIEW,
+    // 예전 버전에서 저장한 파일에는 새로 생긴 보기 설정이 없다
+    view: { ...DEFAULT_PROJECT_VIEW, ...f.view },
     mosaicTracks: Array.isArray(f.mosaicTracks) ? f.mosaicTracks : [],
   } as EditonProjectFile;
 }

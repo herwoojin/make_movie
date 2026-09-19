@@ -20,6 +20,7 @@ export interface ClipRowHandlers {
   onSeek: (ms: number) => void;
   onCaption: (clipId: string, text: string) => void;
   onResetCaption: (clipId: string) => void;
+  onTranslation: (clipId: string, text: string) => void;
 }
 
 interface Props extends ClipRowHandlers {
@@ -28,6 +29,8 @@ interface Props extends ClipRowHandlers {
   selected: boolean;
   active: boolean;
   showDeleted: boolean;
+  /** 번역 프로젝트면 원어 줄 아래에 한국어 줄을 보여 준다. 'translated'면 한국어가 화면에 나가는 자막 */
+  captionLang: 'original' | 'translated' | null;
 }
 
 const SOURCE_BADGE = {
@@ -36,8 +39,8 @@ const SOURCE_BADGE = {
 } as const;
 
 export const ClipRow = memo(function ClipRow({
-  clip, words, selected, active, showDeleted,
-  onToggleSelect, onPlay, onRemove, onRestoreClip, onDeleteWord, onRestoreWord, onSeek, onCaption, onResetCaption,
+  clip, words, selected, active, showDeleted, captionLang,
+  onToggleSelect, onPlay, onRemove, onRestoreClip, onDeleteWord, onRestoreWord, onSeek, onCaption, onResetCaption, onTranslation,
 }: Props) {
   const { label, Icon } = SOURCE_BADGE[clip.sourceKind];
   const durationMs = recalcClipDuration(clip, words);
@@ -93,7 +96,13 @@ export const ClipRow = memo(function ClipRow({
       </div>
 
       <div className="mt-1 pl-5">
-        <CaptionInput clipId={clip.id} text={clip.captionText} edited={clip.captionEdited} onChange={onCaption} onReset={onResetCaption} />
+        <CaptionInput clipId={clip.id} text={clip.captionText} edited={clip.captionEdited} onChange={onCaption} onReset={onResetCaption}
+          onScreen={captionLang === 'original' || (captionLang === 'translated' && !clip.translatedText?.trim())} />
+        {captionLang && (
+          <CaptionInput clipId={clip.id} text={clip.translatedText ?? ''} edited={false} onChange={onTranslation}
+            prefix="한국어" ariaLabel="한국어 자막" placeholder="아직 번역하지 않음 (원어로 나갑니다)"
+            onScreen={captionLang === 'translated' && Boolean(clip.translatedText?.trim())} />
+        )}
       </div>
     </div>
   );

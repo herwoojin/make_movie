@@ -10,10 +10,18 @@ interface Props {
   text: string;
   edited: boolean;
   onChange: (clipId: string, text: string) => void;
-  onReset: (clipId: string) => void;
+  onReset?: (clipId: string) => void;
+  /** 줄 앞 표시 (원어 자막은 ⌨, 번역 자막은 "한국어") */
+  prefix?: string;
+  ariaLabel?: string;
+  placeholder?: string;
+  /** 지금 화면·영상에 나가는 자막 줄인지 */
+  onScreen?: boolean;
 }
 
-export const CaptionInput = memo(function CaptionInput({ clipId, text, edited, onChange, onReset }: Props) {
+export const CaptionInput = memo(function CaptionInput({
+  clipId, text, edited, onChange, onReset, prefix = '⌨', ariaLabel = '자막 글자', placeholder, onScreen = false,
+}: Props) {
   const [value, setValue] = useState(text);
   const ref = useRef<HTMLTextAreaElement>(null);
   const focused = useRef(false);
@@ -32,15 +40,18 @@ export const CaptionInput = memo(function CaptionInput({ clipId, text, edited, o
 
   return (
     <div className="flex items-start gap-1">
-      <span aria-hidden className="pt-1 text-xs text-muted-foreground">⌨</span>
+      <span aria-hidden className={cn('shrink-0 pt-1 text-xs', onScreen ? 'font-medium text-primary' : 'text-muted-foreground')}>{prefix}</span>
       <textarea
         ref={ref}
         rows={1}
         value={value}
-        aria-label="자막 글자"
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        title={onScreen ? '지금 화면·영상에 나가는 자막' : undefined}
         className={cn(
           'scrollbar-thin min-h-7 w-full resize-none rounded-md border border-transparent bg-transparent px-1.5 py-1 text-sm',
           'hover:border-border focus:border-primary focus:outline-none',
+          !onScreen && prefix !== '⌨' && 'text-muted-foreground',
         )}
         onFocus={() => { focused.current = true; }}
         onChange={(e) => setValue(e.target.value)}
@@ -59,7 +70,7 @@ export const CaptionInput = memo(function CaptionInput({ clipId, text, edited, o
           }
         }}
       />
-      {edited && (
+      {edited && onReset && (
         <button type="button" title="자동 생성된 자막으로 되돌리기" aria-label="자동 생성된 자막으로 되돌리기"
           className="mt-1 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => onReset(clipId)}>
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
