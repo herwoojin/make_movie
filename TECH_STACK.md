@@ -2,7 +2,7 @@
 
 > **한 줄 요약**: Next.js 14 UI + 워커 5종이 브라우저 안에서 영상을 디코드·분석·인코딩하고, OPFS/IndexedDB에 저장한다. 서버는 격리 헤더·정적 파일·헬스 체크만 담당하며 영상은 절대 업로드하지 않는다. v2에서는 선택 설치형 로컬 도우미(127.0.0.1)가 브라우저 혼자 못 하는 일만 돕는다.
 >
-> **마지막 업데이트**: 2026-09-18 (v2) · 기계용 인벤토리: [`techstack.json`](./techstack.json) (설정 화면 "기술 스택"에서도 볼 수 있음)
+> **마지막 업데이트**: 2026-09-19 (v2) · 기계용 인벤토리: [`techstack.json`](./techstack.json) (설정 화면 "기술 스택"에서도 볼 수 있음)
 
 ## 1. 아키텍처
 
@@ -39,7 +39,7 @@ flowchart LR
 | 시간 계산 | `src/lib/core/edl.ts#createTimeMap` | 순서 고정: 원본 → EDL → 배속 → 출력 |
 | 화면 비율·채움 | `src/lib/render/frame.ts` | 미리보기·WebCodecs·ffmpeg가 같은 변환을 쓴다 |
 | 1·2단계 파이프라인 | `src/lib/nav.ts`, `/auto-edit`, `/editor` | 단계 이동 시 재인코딩 없음 |
-| 번역 | `src/lib/translate/*` | Gemini·DeepL(BYOK) / Ollama(도우미). 용어 지정·말투·2패스 재검수 |
+| 번역 | `src/lib/translate/*` | Gemini·DeepL(BYOK) / Ollama(도우미). 용어 지정·말투·2패스 재검수. Gemini 모델은 이름을 박아 두지 않고 키로 쓸 수 있는 목록에서 자동 선택(내려간 모델 404 → 다음 모델) |
 | 더빙 | `src/lib/audio/mix.ts`, `src/lib/encode/remuxAudio.ts` | 브라우저 믹싱 + `-c:v copy` 먹싱 |
 | 용량 줄이기 | `src/lib/encode/compress.ts`, `runCompress.ts` | 목표 용량 역산 + constant 비트레이트 |
 | 저장 위치 | `src/lib/storage/saveTarget.ts` | 도우미 → File System Access → 다운로드 |

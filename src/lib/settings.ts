@@ -43,6 +43,9 @@ export const settings = {
   setGroqKey: (key: string) => write('byok.groq', key.trim() || null),
   getGeminiKey: () => read('byok.gemini', '', isString),
   setGeminiKey: (key: string) => write('byok.gemini', key.trim() || null),
+  /** 지난번 번역에 잘 된 Gemini 모델 (다음에 먼저 시도) */
+  getGeminiModel: () => read('translate.geminiModel', '', isString),
+  setGeminiModel: (v: string) => write('translate.geminiModel', v || null),
   getDeeplKey: () => read('byok.deepl', '', isString),
   setDeeplKey: (key: string) => write('byok.deepl', key.trim() || null),
   getTranslateEngine: () => read<TranslateEnginePreference>('translate.engine', 'gemini',

@@ -22,6 +22,8 @@ export interface TranslateOptions {
   mode: TranslateMode;
   /** preview: 방금 번역한 문장 (진행 화면에 보여 준다) */
   onProgress?: (done: number, total: number, message?: string, preview?: string) => void;
+  /** 묶음 하나를 끝낼 때마다 지금까지의 결과 — 중간에 실패해도 번역한 줄을 살린다 (빈 칸은 아직 못 한 줄) */
+  onRows?: (rows: TranslatedCue[]) => void;
   signal?: AbortSignal;
 }
 

@@ -2,7 +2,7 @@
 
 // 1단계 · 해외 영상 한국어 자막 (F-07).
 // 영상 → 원어 자막(Whisper) → 한국어 번역(BYOK/내 컴퓨터) → 표에서 손보기 → 2단계로 인계.
-import { ArrowRight, Download, Languages, Play } from 'lucide-react';
+import { ArrowRight, Download, Languages, Play, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { TranslatedCue } from '@/lib/translate';
@@ -39,11 +39,22 @@ const STAGES: StageDef[] = [
   { id: 'translate', label: '한국어로 번역', weight: 28 },
   { id: 'save', label: '저장', weight: 2 },
 ];
+/** 번역만 다시 할 때 — 음성 인식은 이미 끝나 저장돼 있다 */
+const RETRY_STAGES = STAGES.filter((s) => s.id === 'translate' || s.id === 'save');
 
 interface Job {
   projectId: string;
   fileName: string;
   rows: TranslatedCue[];
+  /** 번역이 끝나지 못한 이유. 원어 자막은 저장돼 있어 번역만 다시 하면 된다 */
+  failure?: { message: string; hint?: string };
+}
+
+/** 표의 번역을 프로젝트 클립에 넣는다 (행 i ↔ 클립 i) */
+async function saveTranslations(projectId: string, rows: readonly TranslatedCue[]) {
+  const bundle = await loadProjectBundle(projectId);
+  const clips = bundle.doc.clips.map((c, i) => ({ ...c, translatedText: rows[i]?.translated ?? c.translatedText }));
+  await saveProjectDoc(bundle.project, { ...bundle.doc, clips }, bundle.suggestions, createHistory());
 }
 
 export function TranslateView() {
@@ -57,7 +68,7 @@ export function TranslateView() {
   const [glossaryText, setGlossaryText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [busy, setBusy] = useState<{ run: StageRun | null; startedAt: number; done: boolean } | null>(null);
+  const [busy, setBusy] = useState<{ stages: StageDef[]; run: StageRun | null; startedAt: number; done: boolean } | null>(null);
   const [notice, setNotice] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -68,6 +79,58 @@ export function TranslateView() {
 
   const meta = TRANSLATE_ENGINES[engine];
 
+  const step = (next: StageRun) => setBusy((b) => (b ? { ...b, run: next } : b));
+
+  /**
+   * 원어 자막을 한국어로. 실패하거나 취소해도 원어 자막과 이미 번역한 줄은 남고, "번역 다시 시도"로 번역만 다시 한다.
+   * 빈 줄만 번역한다 — 모두 번역돼 있으면(재검수만 실패한 경우) 전체를 다시 한다.
+   */
+  const translate = async (projectId: string, fileName: string, base: readonly TranslatedCue[], signal: AbortSignal, skipped?: string[]) => {
+    const todo = base.some((r) => !r.translated) ? base.flatMap((r, i) => (r.translated ? [] : [i])) : base.map((_, i) => i);
+    const latest = base.map((r) => ({ ...r }));
+    const merge = (part: readonly TranslatedCue[]) => part.forEach((r, k) => {
+      if (r.translated) latest[todo[k]] = { ...latest[todo[k]], translated: r.translated };
+    });
+    step({ stageId: 'translate', ratio: 0, message: `자막 ${todo.length}줄 번역 준비`, skipped });
+    try {
+      const rows = await runTranslate({
+        engine,
+        cues: todo.map((i) => ({ start: base[i].start, end: base[i].end, text: base[i].text })),
+        sourceLang,
+        tone,
+        mode,
+        glossary: parseGlossary(glossaryText),
+        signal,
+        onRows: merge,
+        onProgress: (done, total, message, preview) => step({
+          stageId: 'translate',
+          ratio: total ? done / total : 0,
+          message: message ?? '번역하는 중',
+          detail: { chunk: done, chunks: total, text: preview },
+          skipped,
+        }),
+      });
+      merge(rows);
+
+      // 클립에 한국어를 담아 저장 (2단계에서 바로 쓴다)
+      step({ stageId: 'save', ratio: 0.5, message: '프로젝트에 저장하는 중', skipped });
+      await saveTranslations(projectId, latest);
+
+      // 100%를 잠깐 보여 준 뒤 결과 표로 넘어간다
+      setBusy((b) => (b ? { ...b, run: { stageId: 'save', ratio: 1, skipped }, done: true } : b));
+      setJob({ projectId, fileName, rows: latest });
+      useUiStore.getState().setStatus({ kind: 'done', text: `한국어 자막 ${latest.length}줄을 만들었습니다.` });
+      setTimeout(() => setBusy((b) => (b?.done ? null : b)), 1500);
+    } catch (e) {
+      const err = toAppError(e);
+      // 여기까지 번역한 줄은 살려 둔다
+      await saveTranslations(projectId, latest).catch(() => undefined);
+      setJob({ projectId, fileName, rows: latest, failure: { message: err.message, hint: err.hint } });
+      useUiStore.getState().showError(err);
+      setBusy(null);
+    }
+  };
+
   const run = async () => {
     if (!file) return;
     const ctrl = new AbortController();
@@ -75,14 +138,16 @@ export function TranslateView() {
     const startedAt = Date.now();
     // 모델을 내려받은 적이 있는지 — 이미 받아 뒀으면 그 단계는 "이미 준비됨"으로 보인다
     let sawDownload = false;
-    const step = (next: StageRun) => setBusy((b) => (b ? { ...b, run: next } : b));
-    setBusy({ run: { stageId: 'load', ratio: 0, message: '준비 중' }, startedAt, done: false });
+    setJob(null);
+    setBusy({ stages: STAGES, run: { stageId: 'load', ratio: 0, message: '준비 중' }, startedAt, done: false });
     useUiStore.getState().setStatus({ kind: 'busy', text: '해외 영상 한국어 자막을 만드는 중…', startedAt });
+    let projectId: string;
+    let base: TranslatedCue[];
     try {
       // ① 프로젝트로 들여오기 (원본은 이 컴퓨터 안에만 있다)
-      const { projectId } = await createProjectFromFile(file, (p) => step({ stageId: 'load', ratio: p.ratio, message: p.label }), ctrl.signal, {
+      ({ projectId } = await createProjectFromFile(file, (p) => step({ stageId: 'load', ratio: p.ratio, message: p.label }), ctrl.signal, {
         sourceTool: 'translate', pipelineStage: 1,
-      });
+      }));
       const bundle = await loadProjectBundle(projectId);
 
       // ② 원어 자막 만들기 — 구간마다 방금 알아들은 말을 보여 준다
@@ -106,54 +171,40 @@ export function TranslateView() {
         return;
       }
 
-      // ③ 번역 — 묶음마다 방금 번역한 문장을 보여 준다
-      const skipped = sawDownload ? undefined : ['model'];
-      step({ stageId: 'translate', ratio: 0, message: `자막 ${built.clips.length}줄 번역 준비`, skipped });
-      const cues = built.clips.map((c) => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: c.captionTextOriginal }));
-      const rows = await runTranslate({
-        engine,
-        cues,
-        sourceLang,
-        tone,
-        mode,
-        glossary: parseGlossary(glossaryText),
-        signal: ctrl.signal,
-        onProgress: (done, total, message, preview) => step({
-          stageId: 'translate',
-          ratio: total ? done / total : 0,
-          message: message ?? '번역하는 중',
-          detail: { chunk: done, chunks: total, text: preview },
-          skipped,
-        }),
-      });
-
-      // ④ 클립에 원어·한국어를 함께 담아 저장 (2단계에서 바로 쓴다)
-      step({ stageId: 'save', ratio: 0.5, message: '프로젝트에 저장하는 중', skipped });
-      const clips = renumberClips(built.clips.map((c, i) => ({ ...c, translatedText: rows[i]?.translated ?? '' })));
+      // 원어 자막을 먼저 저장 — 번역이 실패해도 음성 인식을 처음부터 다시 하지 않는다
+      const clips = renumberClips(built.clips);
       await saveProjectDoc(bundle.project, { ...bundle.doc, clips, words: built.words }, [], createHistory());
       await getDb().transcripts.update(transcript.id, { language: stt.language });
-
-      // 100%를 잠깐 보여 준 뒤 결과 표로 넘어간다
-      setBusy((b) => (b ? { ...b, run: { stageId: 'save', ratio: 1, skipped }, done: true } : b));
-      setJob({ projectId, fileName: file.name, rows });
-      useUiStore.getState().setStatus({ kind: 'done', text: `한국어 자막 ${rows.length}줄을 만들었습니다.` });
-      setTimeout(() => setBusy((b) => (b?.done ? null : b)), 1500);
+      base = clips.map((c) => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: c.captionTextOriginal, translated: '' }));
     } catch (e) {
       useUiStore.getState().showError(toAppError(e));
       setBusy(null);
+      return;
     }
+
+    // ③ 번역 — 묶음마다 방금 번역한 문장을 보여 준다
+    await translate(projectId, file.name, base, ctrl.signal, sawDownload ? undefined : ['model']);
+  };
+
+  /** 음성 인식은 그대로 두고 번역만 다시 (엔진을 바꿔서 다시 해도 된다) */
+  const retryTranslate = () => {
+    if (!job) return;
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    const startedAt = Date.now();
+    setBusy({ stages: RETRY_STAGES, run: { stageId: 'translate', ratio: 0, message: '번역 다시 시작' }, startedAt, done: false });
+    useUiStore.getState().setStatus({ kind: 'busy', text: '번역을 다시 하는 중…', startedAt });
+    void translate(job.projectId, job.fileName, job.rows, ctrl.signal);
   };
 
   const editRow = (index: number, translated: string) => {
     setJob((j) => (j ? { ...j, rows: j.rows.map((r, i) => (i === index ? { ...r, translated } : r)) } : j));
   };
 
-  /** 표에서 고친 번역을 프로젝트에 반영하고 2단계로 */
+  /** 표에서 고친 번역을 프로젝트에 반영하고 2단계로 (번역 못 한 줄은 원어 자막으로 간다) */
   const sendToStageTwo = async () => {
     if (!job) return;
-    const bundle = await loadProjectBundle(job.projectId);
-    const clips = bundle.doc.clips.map((c, i) => ({ ...c, translatedText: job.rows[i]?.translated ?? c.translatedText }));
-    await saveProjectDoc(bundle.project, { ...bundle.doc, clips }, bundle.suggestions, createHistory());
+    await saveTranslations(job.projectId, job.rows);
     await setPipelineStage(job.projectId, 2);
     router.push(`/editor/${job.projectId}`);
   };
@@ -170,7 +221,7 @@ export function TranslateView() {
             영상에서 원어 자막을 뽑고 한국어로 옮깁니다. 영상·소리는 이 컴퓨터를 벗어나지 않고, 번역 엔진에는 자막 글자만 전달됩니다.
           </p>
         </div>
-        {job && <Button onClick={() => void sendToStageTwo()}>2단계 자막·영상 편집 <ArrowRight /></Button>}
+        {job && !busy && <Button onClick={() => void sendToStageTwo()}>2단계 자막·영상 편집 <ArrowRight /></Button>}
       </header>
 
       <Section title="영상 고르기">
@@ -251,7 +302,7 @@ export function TranslateView() {
       {busy ? (
         <StageProgress
           title="한국어 자막 만들기"
-          stages={STAGES}
+          stages={busy.stages}
           run={busy.run}
           startedAt={busy.startedAt}
           done={busy.done}
@@ -264,8 +315,19 @@ export function TranslateView() {
         </Button>
       )}
 
-      {job && (
+      {job && !busy && (
         <Section title={`번역 결과 ${job.rows.length}줄`} description="한국어 칸을 눌러 직접 고칠 수 있습니다. 고친 내용은 2단계로 그대로 넘어갑니다.">
+          {job.failure && (
+            <div role="alert" className="space-y-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <p className="font-medium">번역을 끝내지 못했습니다 — {job.failure.message}</p>
+              {job.failure.hint && <p className="text-xs text-muted-foreground">{job.failure.hint}</p>}
+              <p className="text-xs text-muted-foreground">
+                원어 자막은 저장돼 있어 음성 인식은 다시 하지 않습니다. 지금 {job.rows.filter((r) => r.translated).length}/{job.rows.length}줄 번역됨 —
+                번역하지 못한 줄은 원어로 남고, 이대로 2단계로 넘어가도 됩니다.
+              </p>
+              <Button size="sm" onClick={retryTranslate}><RotateCcw /> 번역 다시 시도</Button>
+            </div>
+          )}
           <div className="scrollbar-thin max-h-[26rem] overflow-y-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-card">
@@ -283,6 +345,7 @@ export function TranslateView() {
                     <td className="px-1 py-1">
                       <input
                         value={row.translated}
+                        placeholder="아직 번역하지 않음"
                         aria-label={`${formatShort(row.start)} 한국어 자막`}
                         onChange={(e) => editRow(i, e.target.value)}
                         className="w-full rounded border border-transparent bg-transparent px-1.5 py-1 hover:border-border focus:border-primary focus:outline-none"

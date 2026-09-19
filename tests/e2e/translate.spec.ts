@@ -1,5 +1,35 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { collectErrors, FIXTURES } from './helpers';
+
+/**
+ * 구글 번역 서버 흉내. 모델 목록(GET)과 번역(POST)을 대신 답한다.
+ * brokenModel로 고른 모델은 실제로 내려간 모델처럼 404를 돌려준다.
+ */
+async function fakeGemini(page: Page, models = ['gemini-3.6-flash']) {
+  const state = { translateCalls: 0, keyInUrl: false, brokenModel: '', models };
+  await page.route('https://generativelanguage.googleapis.com/**', async (route) => {
+    const req = route.request();
+    if (/[?&]key=/.test(req.url())) state.keyInUrl = true;
+    if (req.method() === 'GET') {
+      await route.fulfill({ json: { models: state.models.map((m) => ({ name: `models/${m}`, supportedGenerationMethods: ['generateContent'] })) } });
+      return;
+    }
+    if (state.brokenModel && req.url().includes(`/models/${state.brokenModel}:`)) {
+      await route.fulfill({ status: 404, json: { error: { code: 404, message: `models/${state.brokenModel} is not found for API version v1beta`, status: 'NOT_FOUND' } } });
+      return;
+    }
+    state.translateCalls += 1;
+    const body = req.postDataJSON() as { contents: { parts: { text: string }[] }[] };
+    const prompt = body.contents[0].parts[0].text;
+    const line = prompt.split('\n').find((l) => l.trim().startsWith('[')) ?? '[]';
+    const items = JSON.parse(line) as (string | { 원문: string })[];
+    const out = items.map((it) => `번역됨: ${typeof it === 'string' ? it : it.원문}`);
+    await new Promise((r) => setTimeout(r, 300)); // 실제 서버처럼 잠깐 걸리게
+    await route.fulfill({ json: { candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] } });
+  });
+  return state;
+}
 
 test('번역 화면: 도우미가 없어도 유튜브 칸만 잠기고 나머지는 모두 쓸 수 있다', async ({ page }) => {
   const errors = collectErrors(page);
@@ -40,17 +70,7 @@ test('번역 화면: 단계·구간·방금 알아들은/번역한 문장이 보
   test.setTimeout(600_000);
   const errors = collectErrors(page);
 
-  let geminiCalls = 0;
-  await page.route('https://generativelanguage.googleapis.com/**', async (route) => {
-    geminiCalls += 1;
-    const body = route.request().postDataJSON() as { contents: { parts: { text: string }[] }[] };
-    const prompt = body.contents[0].parts[0].text;
-    const line = prompt.split('\n').find((l) => l.trim().startsWith('[')) ?? '[]';
-    const items = JSON.parse(line) as (string | { 원문: string })[];
-    const out = items.map((it) => `번역됨: ${typeof it === 'string' ? it : it.원문}`);
-    await new Promise((r) => setTimeout(r, 300)); // 실제 서버처럼 잠깐 걸리게
-    await route.fulfill({ json: { candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] } });
-  });
+  const google = await fakeGemini(page);
 
   await page.goto('/translate');
   await page.evaluate(() => localStorage.setItem('editon.byok.gemini', JSON.stringify('test-key')));
@@ -92,6 +112,54 @@ test('번역 화면: 단계·구간·방금 알아들은/번역한 문장이 보
 
   // 결과 표와 2단계 인계
   await expect(page.getByRole('textbox', { name: /한국어 자막/ }).first()).toHaveValue(/번역됨: /);
-  expect(geminiCalls).toBeGreaterThanOrEqual(2); // 1차 번역 + 정밀 재검수
+  expect(google.translateCalls).toBeGreaterThanOrEqual(2); // 1차 번역 + 정밀 재검수
+  expect(google.keyInUrl).toBe(false); // 키는 헤더로만
+  expect(errors).toEqual([]);
+});
+
+// 번역이 실패하면(예: 구글이 모델을 내림 → 404) 원어 자막이 남고, 음성 인식 없이 번역만 다시 한다
+test('번역 화면: 번역이 실패해도 원어 자막은 남고 "번역 다시 시도"로 번역만 다시 한다 (@network)', async ({ page }) => {
+  test.skip(!process.env.RUN_NETWORK, '음성 인식 모델 다운로드가 필요해 RUN_NETWORK=1 일 때만 실행');
+  test.setTimeout(600_000);
+  const errors = collectErrors(page);
+  const google = await fakeGemini(page);
+  google.brokenModel = 'gemini-3.6-flash'; // 목록에 하나뿐인 모델이 404 → 번역 실패
+
+  await page.goto('/translate');
+  await page.evaluate(() => localStorage.setItem('editon.byok.gemini', JSON.stringify('test-key')));
+  await page.reload();
+  await page.getByLabel('원어').selectOption('ko');
+  await page.getByLabel('음성 인식 모델').selectOption('tiny');
+  await page.getByLabel('번역 방식').selectOption('fast');
+  await page.locator('input[type=file]').setInputFiles(FIXTURES.speech);
+  await page.getByRole('button', { name: /한국어 자막 생성/ }).click();
+  await page.getByRole('button', { name: '전송하고 자막 만들기' }).click();
+
+  // 실패 안내 + 원어 자막이 담긴 표
+  const alert = page.getByRole('alert').filter({ hasText: '번역을 끝내지 못했습니다' });
+  await expect(alert).toBeVisible({ timeout: 540_000 });
+  await expect(alert).toContainText('번역 모델을 찾지 못했습니다');
+  await expect(alert).toContainText('음성 인식은 다시 하지 않습니다');
+  await expect(alert).toContainText(/0\/\d+줄 번역됨/);
+  const firstRow = page.getByRole('textbox', { name: /한국어 자막/ }).first();
+  await expect(firstRow).toHaveValue('');
+  await expect(page.locator('tbody tr').first()).toContainText(/\S/); // 원어 칸은 채워져 있다
+
+  // 구글이 새 모델을 내놓았다고 치고 다시 시도 → 번역·저장 단계만 보인다
+  google.models = ['gemini-3.6-flash', 'gemini-2.5-flash'];
+  await alert.getByRole('button', { name: '번역 다시 시도' }).click();
+  const box = page.getByRole('status', { name: '한국어 자막 만들기 진행 상황' });
+  await expect(box.getByText('한국어로 번역')).toBeVisible();
+  await expect(box.getByText('원어 자막 만들기')).toHaveCount(0);
+  await expect(page.getByText('한국어 자막 만들기 완료')).toBeVisible({ timeout: 60_000 });
+
+  await expect(firstRow).toHaveValue(/번역됨: /);
+  await expect(page.getByRole('alert').filter({ hasText: '번역을 끝내지 못했습니다' })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('editon.translate.geminiModel'))).toBe(JSON.stringify('gemini-2.5-flash'));
+  expect(google.keyInUrl).toBe(false);
+
+  // 2단계로 넘기면 번역이 그대로 따라간다
+  await page.getByRole('button', { name: /2단계 자막·영상 편집/ }).first().click();
+  await expect(page).toHaveURL(/\/editor\//);
   expect(errors).toEqual([]);
 });
