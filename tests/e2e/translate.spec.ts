@@ -7,10 +7,15 @@ import { collectErrors, FIXTURES } from './helpers';
  * brokenModel로 고른 모델은 실제로 내려간 모델처럼 404를 돌려준다.
  */
 async function fakeGemini(page: Page, models = ['gemini-3.6-flash']) {
-  const state = { translateCalls: 0, keyInUrl: false, brokenModel: '', models };
+  const state = { translateCalls: 0, keyInUrl: false, brokenModel: '', models, validKeys: null as string[] | null };
   await page.route('https://generativelanguage.googleapis.com/**', async (route) => {
     const req = route.request();
     if (/[?&]key=/.test(req.url())) state.keyInUrl = true;
+    const key = (await req.allHeaders())['x-goog-api-key'] ?? '';
+    if (state.validKeys && !state.validKeys.includes(key)) {
+      await route.fulfill({ status: 400, json: { error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } } });
+      return;
+    }
     if (req.method() === 'GET') {
       await route.fulfill({ json: { models: state.models.map((m) => ({ name: `models/${m}`, supportedGenerationMethods: ['generateContent'] })) } });
       return;
@@ -145,9 +150,20 @@ test('번역 화면: 번역이 실패해도 원어 자막은 남고 "번역 다�
   await expect(firstRow).toHaveValue('');
   await expect(page.locator('tbody tr').first()).toContainText(/\S/); // 원어 칸은 채워져 있다
 
-  // 구글이 새 모델을 내놓았다고 치고 다시 시도 → 번역·저장 단계만 보인다
-  google.models = ['gemini-3.6-flash', 'gemini-2.5-flash'];
+  // 다시 시도해도 같은 이유로 실패하면 같은 안내로 돌아온다 (음성 인식은 하지 않는다)
   await alert.getByRole('button', { name: '번역 다시 시도' }).click();
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText('번역 모델을 찾지 못했습니다');
+
+  // 새로고침해도 저장된 원어 자막으로 이어서 번역할 수 있다
+  await page.reload();
+  const resume = page.getByText('번역이 끝나지 않은 영상이 있습니다');
+  await expect(resume).toBeVisible();
+  await expect(page.getByText(/번역 0\/\d+줄/)).toBeVisible();
+
+  // 구글이 새 모델을 내놓았다고 치고 이어서 번역 → 번역·저장 단계만 보인다
+  google.models = ['gemini-3.6-flash', 'gemini-2.5-flash'];
+  await page.getByRole('button', { name: '이어서 번역하기' }).click();
   const box = page.getByRole('status', { name: '한국어 자막 만들기 진행 상황' });
   await expect(box.getByText('한국어로 번역')).toBeVisible();
   await expect(box.getByText('원어 자막 만들기')).toHaveCount(0);
@@ -161,5 +177,65 @@ test('번역 화면: 번역이 실패해도 원어 자막은 남고 "번역 다�
   // 2단계로 넘기면 번역이 그대로 따라간다
   await page.getByRole('button', { name: /2단계 자막·영상 편집/ }).first().click();
   await expect(page).toHaveURL(/\/editor\//);
+  expect(errors).toEqual([]);
+});
+
+// 키가 틀리면 음성 인식(오래 걸림)을 시작하기 전에 멈추고, 그 자리에서 키를 고칠 수 있다
+test('번역 화면: 키가 틀리면 시작 전에 알려 주고, 이어 붙은 키도 그 자리에서 고친다', async ({ page }) => {
+  const errors = collectErrors(page);
+  const good = `AIza${'g'.repeat(35)}`;
+  const old = `AIza${'o'.repeat(35)}`;
+  const google = await fakeGemini(page);
+  google.validKeys = [good];
+
+  await page.goto('/translate');
+  await page.evaluate((k) => localStorage.setItem('editon.byok.gemini', JSON.stringify(k)), old);
+  await page.reload();
+  await page.locator('input[type=file]').setInputFiles(FIXTURES.silence);
+  await page.getByRole('button', { name: /한국어 자막 생성/ }).click();
+  await page.getByRole('button', { name: '전송하고 자막 만들기' }).click();
+
+  const alert = page.getByRole('alert').filter({ hasText: '번역 키부터 고쳐 주세요' });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText('Gemini API 키가 올바르지 않습니다');
+  await expect(alert).toContainText('AIza…oooo'); // 어떤 키를 썼는지 앞뒤 4자로
+  await expect(page.getByRole('status', { name: '한국어 자막 만들기 진행 상황' })).toHaveCount(0);
+  expect(google.translateCalls).toBe(0);
+
+  // 비밀번호 칸이라 안 보이니 옛 키 뒤에 새 키를 이어 붙이는 실수 → 경고 + 되는 키를 찾아 저장
+  const field = alert.getByLabel('Gemini API 키');
+  await field.click();
+  await field.press('End');
+  await field.pressSequentially(good);
+  await expect(alert.getByText(/키 2개가 이어 붙어 있음/)).toBeVisible();
+  await alert.getByRole('button', { name: '저장하고 키 확인' }).click();
+  await expect(alert).toHaveCount(0); // 확인되면 안내가 사라진다
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('editon.byok.gemini') ?? '""'))).toBe(good);
+  expect(google.keyInUrl).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('설정: 키는 입력 즉시 저장되고, "저장하고 키 확인"으로 실제로 되는 키인지 보여 준다', async ({ page }) => {
+  const errors = collectErrors(page);
+  const good = `AIza${'g'.repeat(35)}`;
+  const google = await fakeGemini(page, ['gemini-3.6-flash', 'gemini-2.5-flash']);
+  google.validKeys = [good];
+  await page.goto('/settings');
+
+  const field = page.getByLabel('Gemini API 키');
+  await field.fill(`AIza${'x'.repeat(35)}`);
+  await expect(page.getByText('저장됨: AIza…xxxx (39자)')).toBeVisible();
+  await page.getByRole('button', { name: '저장하고 키 확인' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Gemini API 키가 올바르지 않습니다' })).toBeVisible();
+
+  await field.fill(` ${good}\n`);
+  await page.getByRole('button', { name: '키 보기' }).click();
+  await expect(field).toHaveAttribute('type', 'text');
+  await page.getByRole('button', { name: '저장하고 키 확인' }).click();
+  await expect(page.getByText(/쓸 수 있는 키입니다 \(AIza…gggg\) — gemini-3.6-flash 모델로 번역합니다/)).toBeVisible();
+
+  // 새로고침해도 남아 있다 (저장 버튼 없이도 저장됨)
+  await page.reload();
+  await expect(page.getByLabel('Gemini API 키')).toHaveValue(good);
   expect(errors).toEqual([]);
 });

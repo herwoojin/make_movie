@@ -5,17 +5,16 @@ import { useEffect, useState } from 'react';
 import { Section } from '@/components/ui/field';
 import { Input, Label, NativeSelect } from '@/components/ui/misc';
 import { settings, type TranslateEnginePreference } from '@/lib/settings';
+import { GeminiKeyField } from './GeminiKeyField';
 import { TRANSLATE_ENGINES } from '@/lib/translate/types';
 
 export function TranslateSettings() {
   const [engine, setEngine] = useState<TranslateEnginePreference>('gemini');
-  const [gemini, setGemini] = useState('');
   const [deepl, setDeepl] = useState('');
   const [glossary, setGlossary] = useState('');
 
   useEffect(() => {
     setEngine(settings.getTranslateEngine());
-    setGemini(settings.getGeminiKey());
     setDeepl(settings.getDeeplKey());
     setGlossary(settings.getGlossaryText());
   }, []);
@@ -31,12 +30,7 @@ export function TranslateSettings() {
         <p className="text-[11px] text-muted-foreground">{TRANSLATE_ENGINES[engine].description}</p>
       </div>
 
-      <div className="space-y-1">
-        <Label htmlFor="key-gemini" className="text-xs">Gemini API 키</Label>
-        <Input id="key-gemini" type="password" autoComplete="off" placeholder="AIza..." value={gemini}
-          onChange={(e) => { setGemini(e.target.value); settings.setGeminiKey(e.target.value); }} />
-        <p className="text-[11px] text-muted-foreground">Google AI Studio에서 무료로 발급받을 수 있습니다.</p>
-      </div>
+      <GeminiKeyField />
 
       <div className="space-y-1">
         <Label htmlFor="key-deepl" className="text-xs">DeepL API 키</Label>

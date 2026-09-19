@@ -63,6 +63,11 @@ describe('parseJsonArray', () => {
     expect(parseJsonArray('["가","나","다"]', 2)).toEqual(['가', '나']);
     expect(parseJsonArray('그냥 문장', 2)).toBeNull();
   });
+  it('strict면 개수가 정확히 맞을 때만 받는다 (줄 밀림 방지)', () => {
+    expect(parseJsonArray('["가","나","다"]', 2, { strict: true })).toBeNull();
+    expect(parseJsonArray('["가"]', 2, { strict: true })).toBeNull();
+    expect(parseJsonArray('["가","나"]', 2, { strict: true })).toEqual(['가', '나']);
+  });
 });
 
 describe('chunk', () => {

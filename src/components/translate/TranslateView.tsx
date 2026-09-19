@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { TranslatedCue } from '@/lib/translate';
 import { StageProgress } from '@/components/common/StageProgress';
 import { ByokNoticeDialog } from '@/components/editor/panels/ByokNoticeDialog';
+import { GeminiKeyField } from '@/components/settings/GeminiKeyField';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/ui/field';
 import { Input, Label, NativeSelect } from '@/components/ui/misc';
@@ -20,9 +21,10 @@ import { useSidecar } from '@/lib/sidecar/useSidecar';
 import { settings } from '@/lib/settings';
 import { WHISPER_MODELS, type WhisperSize } from '@/lib/stt/localWhisper';
 import { getDb } from '@/lib/storage/db';
-import { loadProjectBundle, saveProjectDoc, saveTranscript, setPipelineStage } from '@/lib/storage/projectRepo';
+import { listProjects, loadProjectBundle, saveProjectDoc, saveTranscript, setPipelineStage } from '@/lib/storage/projectRepo';
 import { createHistory } from '@/lib/core/undo';
 import { MODE_LABELS, TONE_LABELS, TRANSLATE_ENGINES, parseGlossary, runTranslate, type TranslateEngineId, type TranslateMode, type TranslateTone } from '@/lib/translate';
+import { prepareGemini } from '@/lib/translate/gemini';
 import { sttStage, type StageDef, type StageRun } from '@/lib/progress/stages';
 import { cn } from '@/lib/utils';
 import type { Progress as WorkerProgress } from '@/lib/worker/protocol';
@@ -47,7 +49,20 @@ interface Job {
   fileName: string;
   rows: TranslatedCue[];
   /** 번역이 끝나지 못한 이유. 원어 자막은 저장돼 있어 번역만 다시 하면 된다 */
-  failure?: { message: string; hint?: string };
+  failure?: { code: string; message: string; hint?: string };
+}
+
+/** 번역이 끝나지 않은 가장 최근 작업 — 새로고침해도 음성 인식을 다시 하지 않고 이어서 번역한다 */
+async function findUnfinished(): Promise<Job | null> {
+  const project = (await listProjects()).find((p) => p.sourceTool === 'translate' && p.pipelineStage === 1);
+  if (!project) return null;
+  const clips = await getDb().editClips.where('[projectId+idx]').between([project.id, -Infinity], [project.id, Infinity]).toArray();
+  if (clips.length === 0 || clips.every((c) => c.translatedText?.trim())) return null;
+  return {
+    projectId: project.id,
+    fileName: project.name,
+    rows: clips.map((c) => ({ start: c.sourceStartMs, end: c.sourceEndMs, text: c.captionTextOriginal, translated: c.translatedText ?? '' })),
+  };
 }
 
 /** 표의 번역을 프로젝트 클립에 넣는다 (행 i ↔ 클립 i) */
@@ -70,11 +85,17 @@ export function TranslateView() {
   const [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState<{ stages: StageDef[]; run: StageRun | null; startedAt: number; done: boolean } | null>(null);
   const [notice, setNotice] = useState(false);
+  /** 시작 전에 확인해 보니 키가 틀림 — 음성 인식(오래 걸림)을 시작하기 전에 고치게 한다 */
+  const [keyProblem, setKeyProblem] = useState<{ message: string; hint?: string } | null>(null);
+  const [resume, setResume] = useState<Job | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setEngine(settings.getTranslateEngine());
     setGlossaryText(settings.getGlossaryText());
+    let alive = true;
+    void findUnfinished().then((r) => { if (alive) setResume(r); }).catch(() => undefined);
+    return () => { alive = false; };
   }, []);
 
   const meta = TRANSLATE_ENGINES[engine];
@@ -125,7 +146,7 @@ export function TranslateView() {
       const err = toAppError(e);
       // 여기까지 번역한 줄은 살려 둔다
       await saveTranslations(projectId, latest).catch(() => undefined);
-      setJob({ projectId, fileName, rows: latest, failure: { message: err.message, hint: err.hint } });
+      setJob({ projectId, fileName, rows: latest, failure: { code: err.code, message: err.message, hint: err.hint } });
       useUiStore.getState().showError(err);
       setBusy(null);
     }
@@ -139,11 +160,25 @@ export function TranslateView() {
     // 모델을 내려받은 적이 있는지 — 이미 받아 뒀으면 그 단계는 "이미 준비됨"으로 보인다
     let sawDownload = false;
     setJob(null);
+    setResume(null);
+    setKeyProblem(null);
     setBusy({ stages: STAGES, run: { stageId: 'load', ratio: 0, message: '준비 중' }, startedAt, done: false });
     useUiStore.getState().setStatus({ kind: 'busy', text: '해외 영상 한국어 자막을 만드는 중…', startedAt });
     let projectId: string;
     let base: TranslatedCue[];
     try {
+      // ⓪ 번역 키부터 확인 — 음성 인식을 한참 한 뒤에 키 때문에 멈추지 않게
+      if (engine === 'gemini') {
+        step({ stageId: 'load', ratio: 0, message: '번역 키 확인 중' });
+        try {
+          await prepareGemini(ctrl.signal);
+        } catch (e) {
+          const err = toAppError(e);
+          if (err.code === 'API_KEY_INVALID') setKeyProblem({ message: err.message, hint: err.hint });
+          throw err;
+        }
+      }
+
       // ① 프로젝트로 들여오기 (원본은 이 컴퓨터 안에만 있다)
       ({ projectId } = await createProjectFromFile(file, (p) => step({ stageId: 'load', ratio: p.ratio, message: p.label }), ctrl.signal, {
         sourceTool: 'translate', pipelineStage: 1,
@@ -186,16 +221,17 @@ export function TranslateView() {
     await translate(projectId, file.name, base, ctrl.signal, sawDownload ? undefined : ['model']);
   };
 
-  /** 음성 인식은 그대로 두고 번역만 다시 (엔진을 바꿔서 다시 해도 된다) */
-  const retryTranslate = () => {
-    if (!job) return;
+  /** 음성 인식은 그대로 두고 번역만 (엔진을 바꿔서 다시 해도 된다) */
+  const translateOnly = (target: Job) => {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const startedAt = Date.now();
+    setResume(null);
     setBusy({ stages: RETRY_STAGES, run: { stageId: 'translate', ratio: 0, message: '번역 다시 시작' }, startedAt, done: false });
     useUiStore.getState().setStatus({ kind: 'busy', text: '번역을 다시 하는 중…', startedAt });
-    void translate(job.projectId, job.fileName, job.rows, ctrl.signal);
+    void translate(target.projectId, target.fileName, target.rows, ctrl.signal);
   };
+  const retryTranslate = () => job && translateOnly(job);
 
   const editRow = (index: number, translated: string) => {
     setJob((j) => (j ? { ...j, rows: j.rows.map((r, i) => (i === index ? { ...r, translated } : r)) } : j));
@@ -299,6 +335,28 @@ export function TranslateView() {
         </div>
       </Section>
 
+      {resume && !job && !busy && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/40 bg-primary/10 p-3 text-sm">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">번역이 끝나지 않은 영상이 있습니다 — {resume.fileName}</p>
+            <p className="text-xs text-muted-foreground">
+              원어 자막 {resume.rows.length}줄이 저장돼 있습니다 (번역 {resume.rows.filter((r) => r.translated).length}/{resume.rows.length}줄).
+              음성 인식 없이 남은 줄만 이어서 번역합니다.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => translateOnly(resume)}><RotateCcw /> 이어서 번역하기</Button>
+        </div>
+      )}
+
+      {keyProblem && !busy && engine === 'gemini' && (
+        <div role="alert" className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <p className="font-medium">번역 키부터 고쳐 주세요 — {keyProblem.message}</p>
+          {keyProblem.hint && <p className="text-xs text-muted-foreground">{keyProblem.hint}</p>}
+          <p className="text-xs text-muted-foreground">음성 인식을 시작하기 전에 멈췄습니다. 아래에서 키를 확인한 뒤 “한국어 자막 생성”을 다시 눌러 주세요.</p>
+          <GeminiKeyField onVerified={() => setKeyProblem(null)} />
+        </div>
+      )}
+
       {busy ? (
         <StageProgress
           title="한국어 자막 만들기"
@@ -325,6 +383,12 @@ export function TranslateView() {
                 원어 자막은 저장돼 있어 음성 인식은 다시 하지 않습니다. 지금 {job.rows.filter((r) => r.translated).length}/{job.rows.length}줄 번역됨 —
                 번역하지 못한 줄은 원어로 남고, 이대로 2단계로 넘어가도 됩니다.
               </p>
+              {job.failure.code === 'API_KEY_INVALID' && engine === 'gemini' && (
+                <div className="rounded-md border bg-background/40 p-2">
+                  <GeminiKeyField onVerified={retryTranslate} />
+                  <p className="mt-1 text-[11px] text-muted-foreground">키가 확인되면 바로 번역을 다시 시작합니다.</p>
+                </div>
+              )}
               <Button size="sm" onClick={retryTranslate}><RotateCcw /> 번역 다시 시도</Button>
             </div>
           )}

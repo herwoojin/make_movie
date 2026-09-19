@@ -50,8 +50,11 @@ export function buildReviewPrompt(
   ].filter(Boolean).join('\n');
 }
 
-/** 모델이 ```json 울타리나 앞뒤 설명을 붙여도 배열만 꺼낸다 */
-export function parseJsonArray(text: string, expected: number): string[] | null {
+/**
+ * 모델이 ```json 울타리나 앞뒤 설명을 붙여도 배열만 꺼낸다.
+ * strict면 개수가 정확히 맞을 때만 돌려준다 — 개수가 다르면 번역이 다른 줄로 밀려 있을 수 있다.
+ */
+export function parseJsonArray(text: string, expected: number, { strict = false } = {}): string[] | null {
   const cleaned = text.replace(/```json/gi, '```').split('```').map((s) => s.trim()).filter(Boolean);
   const candidates = [text, ...cleaned];
   for (const candidate of candidates) {
@@ -63,6 +66,7 @@ export function parseJsonArray(text: string, expected: number): string[] | null 
       if (!Array.isArray(parsed)) continue;
       const strings = parsed.map((v) => (typeof v === 'string' ? v : typeof v === 'object' && v !== null ? String((v as Record<string, unknown>).번역 ?? (v as Record<string, unknown>).translated ?? '') : String(v)));
       if (strings.length === expected) return strings;
+      if (strict) continue;
       // 개수가 다르면 앞에서부터 맞는 만큼만 쓰고 나머지는 호출한 쪽이 원문을 유지한다
       if (strings.length > 0) return strings.slice(0, expected);
     } catch {
