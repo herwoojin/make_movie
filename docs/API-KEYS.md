@@ -105,8 +105,12 @@ Firebase 콘솔 → **Authentication** → **설정** → **승인된 도메인*
 유튜브 받기 · 내 목소리 TTS · 내 컴퓨터 번역 · 빠른 압축 · 원하는 폴더에 저장을 쓰려면 필요합니다.
 
 ```bash
-npx editon-helper
+cd ~/make_movie        # 편집ON 프로젝트 폴더
+npm run helper
 ```
+
+> `npx editon-helper`는 npm에 배포한 뒤에 쓸 수 있습니다. 아직 배포 전이라 지금은 위 명령을 씁니다.
+> 배포한 사이트(https)에서 쓸 때는 주소를 허용해 주세요: `EDITON_ORIGINS=https://내사이트.netlify.app npm run helper`
 
 실행하면 터미널에 이렇게 나옵니다.
 

@@ -92,8 +92,8 @@ export function YoutubeTool() {
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           <p className="font-medium">내 컴퓨터 도우미가 필요합니다</p>
           <p className="mt-0.5 text-muted-foreground">
-            브라우저만으로는 유튜브 영상을 받을 수 없습니다. 터미널에서 <code className="rounded bg-muted px-1">npx editon-helper</code> 를 실행하고
-            설정 화면에 토큰을 넣으면 이 기능이 켜집니다.
+            브라우저만으로는 유튜브 영상을 받을 수 없습니다. 편집ON 프로젝트 폴더에서 터미널로{' '}
+            <code className="rounded bg-muted px-1">npm run helper</code> 를 실행하고, 나온 토큰을 설정 화면에 넣으면 이 기능이 켜집니다.
           </p>
         </div>
       )}

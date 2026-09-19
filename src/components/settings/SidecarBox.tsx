@@ -1,7 +1,7 @@
 'use client';
 
 // 내 컴퓨터 도우미(사이드카) 연결. 없어도 앱은 그대로 동작하므로 "선택"이라는 점을 분명히 한다.
-import { Check, Plug, RefreshCw } from 'lucide-react';
+import { Check, Copy, Plug, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Section } from '@/components/ui/field';
@@ -18,9 +18,22 @@ const FEATURE_LABELS: Record<string, string> = {
   tts: '내 목소리 TTS',
 };
 
+/** 아직 npm에 올리지 않아 npx로는 받을 수 없다 — 프로젝트 폴더에서 바로 켠다 */
+const HELPER_COMMAND = 'npm run helper';
+
 export function SidecarBox() {
   const { status, health, features, recheck } = useSidecar();
   const [token, setToken] = useState('');
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(HELPER_COMMAND);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 클립보드 권한이 없으면 직접 선택해서 복사하면 된다
+    }
+  };
   useEffect(() => setToken(settings.getSidecarToken()), []);
 
   return (
@@ -55,9 +68,24 @@ export function SidecarBox() {
         </p>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        설치: 터미널에서 <code className="rounded bg-muted px-1">npx editon-helper</code> 를 실행하면 토큰이 표시됩니다.
-      </p>
+      <div className="space-y-1.5 rounded-md border p-2.5 text-xs">
+        <p className="font-medium">도우미 켜는 법</p>
+        <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
+          <li>터미널을 열고 편집ON 프로젝트 폴더에서 아래 명령을 실행합니다.</li>
+        </ol>
+        <div className="flex items-center gap-1.5">
+          <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-foreground">{HELPER_COMMAND}</code>
+          <Button size="sm" variant="ghost" onClick={() => void copy()}>{copied ? <Check /> : <Copy />} {copied ? '복사됨' : '복사'}</Button>
+        </div>
+        <ol start={2} className="list-decimal space-y-1 pl-4 text-muted-foreground">
+          <li>터미널에 나온 <b className="text-foreground">토큰: …</b> 줄을 복사해 위 “연결 토큰” 칸에 붙여넣습니다.</li>
+          <li>“다시 확인”을 누르면 연결됩니다. 터미널 창은 쓰는 동안 켜 두세요.</li>
+        </ol>
+        <p className="text-muted-foreground">
+          배포한 사이트(https)에서 쓸 때는 주소를 허용해 줘야 합니다:{' '}
+          <code className="rounded bg-muted px-1">EDITON_ORIGINS=https://내사이트.netlify.app npm run helper</code>
+        </p>
+      </div>
     </Section>
   );
 }

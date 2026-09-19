@@ -17,8 +17,12 @@
 ## 실행
 
 ```bash
-npx editon-helper
+cd ~/make_movie        # 편집ON 프로젝트 폴더
+npm run helper
 ```
+
+> `npx editon-helper`는 npm에 배포한 뒤에 쓸 수 있습니다. 아직 배포 전이라 지금은 위 명령을 씁니다.
+> 배포한 사이트(https)에서 쓸 때는 주소를 허용해 주세요: `EDITON_ORIGINS=https://내사이트.netlify.app npm run helper`
 
 처음 실행하면 토큰을 만들어 보여 주고 `~/.editon/token`(권한 600)에 저장합니다.
 웹앱 → **설정 → 내 컴퓨터 도우미**에 그 토큰을 붙여넣으면 연결됩니다.

@@ -14,6 +14,7 @@
     "test:cov": "vitest run --coverage",
     "e2e": "playwright test",
     "assets": "node scripts/copy-assets.mjs",
+    "helper": "npm --prefix packages/helper install --no-audit --no-fund --silent && node packages/helper/bin/editon-helper.js",
     "postinstall": "node scripts/copy-assets.mjs"
   },
   "dependencies": {

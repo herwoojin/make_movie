@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 실행하면 토큰을 보여 주고 127.0.0.1:47600 에서 기다린다.
 import { detectFeatures } from '../src/bin.js';
-import { defaultOutDir, start } from '../src/server.js';
+import { allowedOrigins, defaultOutDir, start } from '../src/server.js';
 import { TOKEN_PATH } from '../src/token.js';
 
 const { features, paths } = detectFeatures();
@@ -23,6 +23,10 @@ try {
   console.log(`  ${mark(features.tts)} 내 목소리 TTS${features.tts ? '' : ' — EDITON_TTS_COMMAND 를 지정하면 켜집니다'}`);
   console.log('');
   console.log(`  저장 폴더: ${defaultOutDir()}`);
+  console.log(`  연결을 허용한 사이트: ${allowedOrigins().join(', ')}`);
+  if (!process.env.EDITON_ORIGINS) {
+    console.log('  (배포한 사이트에서 쓰려면: EDITON_ORIGINS=https://내사이트.netlify.app npm run helper)');
+  }
   console.log('  끄려면 Ctrl+C.');
   console.log('');
 } catch (e) {

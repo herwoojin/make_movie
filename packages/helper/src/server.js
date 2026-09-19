@@ -92,6 +92,16 @@ export async function createServer({ token, bundledDir, logger = false } = {}) {
   const secret = token ?? loadOrCreateToken();
   const origins = allowedOrigins();
 
+  // 배포된 https 사이트가 127.0.0.1을 부를 때 Chrome은 "사설망 접근" 사전 확인을 보낸다.
+  // 허용 출처(origins)에서 온 확인에만 응답한다 — 그 외 출처는 CORS에서 이미 막힌다.
+  // CORS 플러그인이 사전 확인에 먼저 답해 버리므로, 그보다 앞에 등록해야 한다.
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method === 'OPTIONS' && req.headers['access-control-request-private-network'] === 'true'
+      && typeof req.headers.origin === 'string' && origins.includes(req.headers.origin)) {
+      reply.header('Access-Control-Allow-Private-Network', 'true');
+    }
+  });
+
   await app.register(cors, { origin: origins, methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['authorization', 'content-type', 'accept'] });
   await app.register(multipart, { limits: { fileSize: 4 * 1024 * 1024 * 1024 } });
 
