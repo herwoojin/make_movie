@@ -43,6 +43,8 @@ export interface Project {
   captionLang?: CaptionLang;
   pipelineStage: PipelineStage;
   sourceTool: SourceTool;
+  /** 만든 계정(uid). 로그인하지 않고 만들었으면 'guest', 계정을 나누기 전에 만든 작업은 'legacy' */
+  ownerUid?: string;
 }
 
 export interface MediaAsset {
@@ -299,6 +301,7 @@ export interface SavedResult {
   thumbnail?: string;          // 작은 미리보기 (data URL)
   projectId?: string;          // 되돌아가서 재편집할 프로젝트
   createdAt: number;
+  ownerUid?: string;           // 만든 계정 (Project.ownerUid와 같은 규칙)
 }
 
 export type VoiceEmotion = 'default' | 'calm' | 'bright' | 'serious' | 'sad' | 'emphatic';
@@ -313,6 +316,7 @@ export interface VoiceProfile {
   sampleRate: number;
   durationMs: number;
   updatedAt: number;
+  ownerUid?: string;           // 녹음한 계정 (Project.ownerUid와 같은 규칙)
 }
 
 /** 용어 지정 (F-07). "Sunburst=선버스트" 같은 고유명사 대응표 */

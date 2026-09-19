@@ -2,7 +2,7 @@
   "project": "편집ON (EditON)",
   "description": "브라우저에서 100% 클라이언트 사이드로 동작하는 무료 영상 편집 웹앱 — v2: 단어 칩 단위 편집, 1·2단계 파이프라인, 화면 비율·배속, 해외 영상 한국어 자막, 더빙·용량 줄이기, 선택 설치형 로컬 도우미",
   "lastUpdated": "2026-09-19",
-  "architectureSummary": "Next.js 14 UI + 워커 5종(오디오·STT·비전·인코딩·저장) + OPFS/IndexedDB(v3) 저장. 서버는 COOP/COEP 헤더·정적 파일·헬스 체크만 담당하고 영상은 절대 업로드하지 않음. 선택 사항으로 127.0.0.1:47600 로컬 도우미(packages/helper)가 유튜브 받기·네이티브 ffmpeg·로컬 번역/TTS·폴더 저장을 담당",
+  "architectureSummary": "Next.js 14 UI + 워커 5종(오디오·STT·비전·인코딩·저장) + OPFS/IndexedDB(v4) 저장(로그인 계정별로 나눠 보여 줌). 서버는 COOP/COEP 헤더·정적 파일·헬스 체크만 담당하고 영상은 절대 업로드하지 않음. 선택 사항으로 127.0.0.1:47600 로컬 도우미(packages/helper)가 유튜브 받기·네이티브 ffmpeg·로컬 번역/TTS·폴더 저장을 담당",
   "repo": "local: /Users/heoujin/make_movie",
   "categories": [
     {
@@ -89,7 +89,7 @@
         {
           "name": "Dexie",
           "version": "4.4",
-          "purpose": "IndexedDB 스키마 v3 — 프로젝트·EDL·편집 클립(EditClip)·단어·모자이크·파형·프리셋·최근 저장 결과·음성 프로필·저장 폴더 권한",
+          "purpose": "IndexedDB 스키마 v4 — 프로젝트·EDL·편집 클립(EditClip)·단어·모자이크·파형·프리셋·최근 저장 결과·음성 프로필·저장 폴더 권한. v4: 프로젝트·저장 결과·음성 프로필에 ownerUid(로그인 계정 uid / guest / legacy)를 두고 지금 계정의 것만 목록·열기에 보여 준다 (src/lib/storage/owner.ts)",
           "config": "src/lib/storage/db.ts"
         }
       ]

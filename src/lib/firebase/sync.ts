@@ -2,6 +2,7 @@
 // 로컬(IndexedDB/localStorage)이 기준이고, 사용자가 버튼을 누를 때만 서버와 맞춘다 — 자동 업로드는 하지 않는다.
 import { settings } from '@/lib/settings';
 import { getDb } from '@/lib/storage/db';
+import { listProjects } from '@/lib/storage/projectRepo';
 import { requireUser } from './auth';
 import { mapFirestoreError } from './errors';
 import {
@@ -76,7 +77,8 @@ export async function pushProjectMeta(): Promise<number> {
   const { fb, uid } = await requireUser();
   return guard(async () => {
     const { doc, setDoc } = await import('firebase/firestore');
-    const projects = await getDb().projects.toArray();
+    // 이 계정의 프로젝트만 — 같은 브라우저의 다른 사람 작업 목록이 내 계정에 올라가지 않게
+    const projects = await listProjects();
     const label = deviceLabel();
     for (const p of projects) await setDoc(doc(fb.db, 'users', uid, 'projectMeta', p.id), projectToMetaDoc(p, label));
     return projects.length;

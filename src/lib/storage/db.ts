@@ -5,6 +5,7 @@ import type {
   Project, SavedResult, StylePresetRecord, SubtitleCue, SubtitleStyle, Thumbnail, Transcript, TranscriptWord,
   VoiceProfile, Waveform,
 } from '@/types/models';
+import { currentOwnerSync, LEGACY } from './owner';
 
 export type * from '@/types/models';
 
@@ -125,6 +126,27 @@ export class EditOnDB extends Dexie {
 
     // v3: 저장 폴더 권한 핸들 보관 (F-11 3단계 저장)
     this.version(3).stores({ fsHandles: 'id' });
+
+    // v4: 계정별로 나눠 보여 주기. 이전에 만든 작업은 주인을 모르므로 'legacy' — 이 브라우저에서 로그인한 계정이 가져간다
+    this.version(4).stores({
+      projects: 'id, updatedAt, status, ownerUid',
+      savedResults: 'id, createdAt, kind, toolId, ownerUid',
+      voiceProfiles: 'id, emotion, updatedAt, ownerUid',
+    }).upgrade(async (tx) => {
+      for (const table of ['projects', 'savedResults', 'voiceProfiles']) {
+        await tx.table(table).toCollection().modify((row: { ownerUid?: string }) => {
+          if (!row.ownerUid) row.ownerUid = LEGACY;
+        });
+      }
+    });
+
+    // 어느 경로로 만들든 주인이 비지 않게 한다 (만드는 쪽이 먼저 정했으면 그대로)
+    const stamp = (_key: unknown, row: { ownerUid?: string }) => {
+      if (!row.ownerUid) row.ownerUid = currentOwnerSync();
+    };
+    this.projects.hook('creating', stamp);
+    this.savedResults.hook('creating', stamp);
+    this.voiceProfiles.hook('creating', stamp);
   }
 }
 

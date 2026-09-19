@@ -12,6 +12,7 @@ import { buildProjectFile, deleteProject, listProjects } from '@/lib/storage/pro
 import { downloadBlob, formatRelative } from '@/lib/utils';
 import { useUiStore } from '@/store/uiStore';
 import { ImportProjectDialog } from './ImportProjectDialog';
+import { OwnerNotice } from './OwnerNotice';
 
 const STATUS: Record<Project['status'], string> = { draft: '새 프로젝트', editing: '편집 중', exporting: '내보내는 중', done: '완료' };
 
@@ -55,7 +56,8 @@ export function ProjectsView() {
           <Button asChild><Link href="/">새 영상 올리기</Link></Button>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground">이 브라우저에 저장된 프로젝트입니다. 다른 컴퓨터로 옮기려면 프로젝트 파일(.editon.json)로 내보낸 뒤 원본 영상과 함께 불러오세요.</p>
+      <p className="text-sm text-muted-foreground">이 브라우저에 저장된 내 프로젝트입니다(로그인한 계정의 작업만 보입니다). 다른 컴퓨터로 옮기려면 프로젝트 파일(.editon.json)로 내보낸 뒤 원본 영상과 함께 불러오세요.</p>
+      <OwnerNotice showGuestWarning />
 
       {projects === null ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Card key={i} className="h-32 animate-pulse" />)}</div>

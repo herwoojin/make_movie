@@ -62,7 +62,7 @@ flowchart LR
 |---|---|---|---|---|
 | Zustand | 4.5 | 프로젝트·타임라인·UI 스토어 | `src/store` | |
 | immer | 11 | 불변 업데이트 + 되돌리기 패치 20단계 | `src/lib/core/undo.ts` | 패치만 저장해 메모리 절약 |
-| Dexie | 4.4 | IndexedDB 스키마 (ERD 3장 + 프리셋) | `src/lib/storage/db.ts` | |
+| Dexie | 4.4 | IndexedDB 스키마 v4 (ERD 3장 + 프리셋) | `src/lib/storage/db.ts` | 프로젝트·저장 결과·음성 프로필은 로그인 계정별로 나눠 보여 줌 (`owner.ts`) |
 | OPFS | 네이티브 | 원본 사본·PCM·썸네일·결과 | `src/lib/storage/opfs.ts` | 원본 3배 여유 확인 |
 
 ### 미디어 처리 (브라우저 내)
@@ -121,6 +121,8 @@ flowchart LR
 | storage.googleapis.com | `npm install` 시 얼굴 모델 1회 다운로드 | 무료 | 수동 배치 안내 출력 |
 
 ## 5. 알려진 한계
+
+- **계정별 보기는 화면에서 가리는 것**: 영상·자막은 이 브라우저 저장소(OPFS/IndexedDB)에만 있고, 로그인 계정별로 목록·열기를 막는다. 저장소 자체를 암호화하지는 않으므로 같은 컴퓨터의 개발자 도구로는 읽을 수 있다. 공용 컴퓨터에서는 다 쓰고 프로젝트를 지우는 것이 안전하다. BYOK 키(localStorage)는 아직 계정별로 나누지 않는다.
 - 1080p 기준 20분 정도가 현실적 상한 (브라우저 메모리). 20분 초과 시 경고.
 - WebCodecs 내보내기는 MP4/MOV 원본만. WebM·MKV 원본은 ffmpeg 폴백(5~10배 느림).
 - ffmpeg 폴백 + 모자이크는 3분 이하 결과물만 (구운 프레임을 wasm 메모리에 올려야 해서).

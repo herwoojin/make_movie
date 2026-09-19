@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import type { SavedResult, SavedResultKind } from '@/types/models';
 import { getDb } from './db';
 import { deleteFile, paths, readFile, writeFile } from './opfs';
+import { isVisible, ownerReady } from './owner';
 import { saveResultFile, type SaveOutcome } from './saveTarget';
 
 /** 이 수를 넘으면 정리하라고 알린다 (자동으로 지우지는 않는다) */
@@ -43,6 +44,7 @@ export async function recordSavedResult(input: RecordResultInput, outcome: SaveO
     thumbnail: input.thumbnail,
     projectId: input.projectId,
     createdAt: Date.now(),
+    ownerUid: await ownerReady(),
   };
   await getDb().savedResults.put(row);
   return row;
@@ -55,8 +57,11 @@ export async function saveAndRecord(input: RecordResultInput): Promise<{ outcome
   return { outcome, row };
 }
 
+/** 지금 로그인한 계정이 저장한 결과만 */
 export async function listSavedResults(): Promise<SavedResult[]> {
-  return getDb().savedResults.orderBy('createdAt').reverse().toArray();
+  const owner = await ownerReady();
+  const rows = await getDb().savedResults.orderBy('createdAt').reverse().toArray();
+  return rows.filter((r) => isVisible(r.ownerUid, owner));
 }
 
 export async function getSavedBlob(row: SavedResult): Promise<File | null> {

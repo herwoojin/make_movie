@@ -8,6 +8,7 @@ import { clipSpeedRanges } from '@/lib/core/clips';
 import { outputDurationMs } from '@/lib/core/edl';
 import type { UndoEntry, UndoHistory } from '@/lib/core/undo';
 import { AppError } from '@/lib/errors';
+import { isVisible, ownerReady } from './owner';
 import { matchFillers, type FillerEntry } from '@/lib/stt/fillers';
 import type { SttWord } from '@/lib/stt/types';
 import { DEFAULT_STYLE_VALUES } from '@/lib/subtitle/model';
@@ -41,8 +42,11 @@ export function projectView(project: Project): ProjectView {
   };
 }
 
+/** 지금 로그인한 계정의 프로젝트만 (로그아웃 상태면 로그인하지 않고 만든 것만) */
 export async function listProjects(): Promise<Project[]> {
-  return getDb().projects.orderBy('updatedAt').reverse().toArray();
+  const owner = await ownerReady();
+  const all = await getDb().projects.orderBy('updatedAt').reverse().toArray();
+  return all.filter((p) => isVisible(p.ownerUid, owner));
 }
 
 export interface ProjectRow {
@@ -68,6 +72,10 @@ export async function loadProjectBundle(projectId: string): Promise<ProjectBundl
   const db = getDb();
   const project = await db.projects.get(projectId);
   if (!project) throw new AppError('NOT_FOUND', '프로젝트를 찾을 수 없습니다.', '프로젝트 목록에서 다시 열거나 영상을 새로 올려 주세요.');
+  // 주소를 직접 넣어도 다른 계정(또는 로그아웃 상태에서 내 계정)의 작업은 열리지 않는다
+  if (!isVisible(project.ownerUid, await ownerReady())) {
+    throw new AppError('NOT_FOUND', '지금 계정에서는 열 수 없는 프로젝트입니다.', '이 프로젝트를 만든 계정으로 로그인해 주세요.');
+  }
   const asset = await db.mediaAssets.where('projectId').equals(projectId).first();
   if (!asset) throw new AppError('NOT_FOUND', '프로젝트의 원본 정보가 없습니다.', '영상을 새로 올려 주세요.');
 

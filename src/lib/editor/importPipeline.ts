@@ -10,6 +10,7 @@ import { probeMedia } from '@/lib/media/probeClient';
 import { getDb, SCHEMA_VERSION } from '@/lib/storage/db';
 import { paths, readFile, writeFile } from '@/lib/storage/opfs';
 import { defaultStyle, saveWaveform } from '@/lib/storage/projectRepo';
+import { ownerReady } from '@/lib/storage/owner';
 import { ensureRoomFor, requestPersistence } from '@/lib/storage/quota';
 import { audioWorker, storageWorker } from '@/lib/worker/instances';
 
@@ -69,12 +70,15 @@ export async function createProjectFromFile(
 
   onProgress({ stage: 'save', ratio: 0.97, label: '프로젝트 만드는 중' });
   const now = Date.now();
+  // 로그인한 계정의 작업으로 만든다 (로그아웃하면 보이지 않는다)
+  const ownerUid = await ownerReady();
   const project: Project = {
     id: projectId, name: file.name.replace(/\.[^.]+$/, ''), durationMs: probe.durationMs, sourceDurationMs: probe.durationMs,
     width: probe.width, height: probe.height, fps: probe.fps, status: 'draft', createdAt: now, updatedAt: now, schemaVersion: SCHEMA_VERSION,
     ...DEFAULT_PROJECT_VIEW, pipelineStage: opts.pipelineStage ?? 1, sourceTool: opts.sourceTool ?? 'import',
     // 해외 영상 한국어 자막으로 만든 프로젝트는 처음부터 한국어 자막을 보여 준다
     captionLang: opts.sourceTool === 'translate' ? 'translated' : 'original',
+    ownerUid,
   };
   const asset: MediaAsset = {
     id: assetId, projectId, kind: 'video', fileName: file.name, fileSize: file.size, mimeType: file.type || `video/${ext}`,
